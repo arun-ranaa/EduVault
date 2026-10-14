@@ -1,0 +1,12 @@
+{
+  "name": "eduvault",
+  "version": "1.0.0",
+  "description": "EduVault - Academic Resource Sharing and Personal Storage Platform",
+  "private": true,
+  "workspaces": ["server", "client"],
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "install:all": "cd server && npm install && cd ../client && npm install"
+  }
+}

@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int          @id @default(autoincrement())
+  name          String       @db.VarChar(100)
+  email         String       @unique @db.VarChar(255)
+  passwordHash  String       @db.VarChar(255)
+  role          Role         @default(USER)
+  storageQuota  BigInt       @default(5368709120) // 5GB in bytes
+  storageUsed   BigInt       @default(0)
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  resources     Resource[]
+  bookmarks     Bookmark[]
+  vaultFiles    VaultFile[]
+  activities    Activity[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model Category {
+  id          Int        @id @default(autoincrement())
+  name        String     @unique @db.VarChar(100)
+  description String?    @db.VarChar(500)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  resources   Resource[]
+
+  @@map("categories")
+}
+
+model Resource {
+  id            Int          @id @default(autoincrement())
+  title         String       @db.VarChar(255)
+  description   String?      @db.Text
+  subject       String?      @db.VarChar(100)
+  resourceType  ResourceType
+  semester      String?      @db.VarChar(20)
+  fileName      String       @db.VarChar(255)
+  fileType      String       @db.VarChar(50)
+  fileSize      BigInt
+  s3Key         String       @db.VarChar(500)
+  downloadCount Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  categoryId    Int?
+  category      Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  uploadedById  Int
+  uploadedBy    User         @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  bookmarks     Bookmark[]
+  tags          ResourceTag[]
+
+  @@index([categoryId])
+  @@index([uploadedById])
+  @@index([resourceType])
+  @@index([subject])
+  @@index([createdAt])
+  @@index([title])
+  @@map("resources")
+}
+
+enum ResourceType {
+  NOTES
+  BOOK
+  QUESTION_PAPER
+  ASSIGNMENT
+  STUDY_MATERIAL
+  QUESTION_BANK
+  LAB_RESOURCE
+  OTHER
+}
+
+model Tag {
+  id        Int           @id @default(autoincrement())
+  name      String        @unique @db.VarChar(50)
+  createdAt DateTime      @default(now())
+
+  resources ResourceTag[]
+
+  @@index([name])
+  @@map("tags")
+}
+
+model ResourceTag {
+  id         Int      @id @default(autoincrement())
+  resourceId Int
+  tagId      Int
+
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([resourceId, tagId])
+  @@map("resource_tags")
+}
+
+model Bookmark {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  resourceId Int
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, resourceId])
+  @@index([userId])
+  @@index([resourceId])
+  @@map("bookmarks")
+}
+
+model VaultFile {
+  id        Int      @id @default(autoincrement())
+  ownerId   Int
+  name      String   @db.VarChar(255)
+  fileName  String   @db.VarChar(255)
+  fileType  String   @db.VarChar(50)
+  fileSize  BigInt
+  s3Key     String   @db.VarChar(500)
+  folder    String   @default("/") @db.VarChar(255)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([folder])
+  @@index([ownerId, folder])
+  @@map("vault_files")
+}
+
+model Activity {
+  id        Int          @id @default(autoincrement())
+  userId    Int?
+  action    ActivityType
+  details   String?      @db.Text
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activities")
+}
+
+enum ActivityType {
+  USER_REGISTERED
+  USER_LOGIN
+  RESOURCE_UPLOADED
+  RESOURCE_DELETED
+  VAULT_FILE_UPLOADED
+  VAULT_FILE_DELETED
+  BOOKMARK_ADDED
+  BOOKMARK_REMOVED
+  CATEGORY_CREATED
+  CATEGORY_UPDATED
+  CATEGORY_DELETED
+}
