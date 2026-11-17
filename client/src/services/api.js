@@ -75,6 +75,7 @@ export const bookmarkAPI = {
 export const vaultAPI = {
   getFiles: (params) => api.get('/vault', { params }),
   getFileById: (id) => api.get(`/vault/${id}`),
+  getById: (id) => api.get(`/vault/${id}`),
   getFolders: () => api.get('/vault/folders'),
   presign: (data) => api.post('/vault/presign', data),
   complete: (data) => api.post('/vault/complete', data),

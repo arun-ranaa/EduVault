@@ -278,7 +278,7 @@ const VaultPage = () => {
           </>
         ) : (
           <EmptyState
-            icon={<HiOutlineLockClosed className="w-12 h-12 text-gray-300" />}
+            icon={HiOutlineLockClosed}
             title="Your vault is empty"
             message={searchQuery || selectedFolder ? "No files match your filters." : "Upload files to keep them secure in your personal vault."}
             action={!searchQuery && !selectedFolder ? (
