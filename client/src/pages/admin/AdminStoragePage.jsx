@@ -13,9 +13,8 @@ const AdminStoragePage = () => {
     const fetchStorage = async () => {
       try {
         const res = await adminAPI.getStorage();
-        if (res.success) {
-          setStorageData(res.data);
-        }
+        const payload = res.data?.data ?? res.data ?? null;
+        setStorageData(payload);
       } catch (error) {
         toast.error('Failed to load storage data');
         console.error(error);

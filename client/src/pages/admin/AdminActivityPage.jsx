@@ -16,10 +16,10 @@ const AdminActivityPage = () => {
     try {
       setLoading(true);
       const res = await adminAPI.getActivities({ page, type: typeFilter });
-      if (res.success) {
-        setActivities(res.data || []);
-        setTotalPages(res.pagination?.pages || 1);
-      }
+      const payload = res.data?.data ?? res.data ?? [];
+      const pagination = res.data?.pagination ?? res.pagination ?? { pages: 1 };
+      setActivities(Array.isArray(payload) ? payload : (payload.data || []));
+      setTotalPages(pagination.pages || 1);
     } catch (error) {
       toast.error('Failed to load activity logs');
     } finally {

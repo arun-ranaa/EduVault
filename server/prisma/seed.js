@@ -64,7 +64,7 @@ async function main() {
 
   const user2 = await prisma.user.upsert({
     where: { email: 'user2@eduvault.com' },
-    update: {},
+    update: { passwordHash: userPassword, isActive: true },
     create: {
       name: 'Test User 2',
       email: 'user2@eduvault.com',
@@ -73,6 +73,34 @@ async function main() {
     },
   });
   console.log(`Created Normal user 2: ${user2.email} / User@123`);
+
+  // 10 Dummy Student Accounts
+  const dummyUsers = [
+    { name: 'Aarav Sharma', email: 'aarav@eduvault.com' },
+    { name: 'Priya Patel', email: 'priya@eduvault.com' },
+    { name: 'Rahul Verma', email: 'rahul@eduvault.com' },
+    { name: 'Sneha Reddy', email: 'sneha@eduvault.com' },
+    { name: 'Vikram Singh', email: 'vikram@eduvault.com' },
+    { name: 'Ananya Iyer', email: 'ananya@eduvault.com' },
+    { name: 'Rohan Gupta', email: 'rohan@eduvault.com' },
+    { name: 'Neha Joshi', email: 'neha@eduvault.com' },
+    { name: 'Aditya Nair', email: 'aditya@eduvault.com' },
+    { name: 'Pooja Mehta', email: 'pooja@eduvault.com' }
+  ];
+
+  for (const u of dummyUsers) {
+    const student = await prisma.user.upsert({
+      where: { email: u.email },
+      update: { passwordHash: userPassword, isActive: true },
+      create: {
+        name: u.name,
+        email: u.email,
+        passwordHash: userPassword,
+        role: 'USER',
+      },
+    });
+    console.log(`Created Student: ${student.name} (${student.email}) / User@123`);
+  }
 
   console.log('Seeding finished.');
 }

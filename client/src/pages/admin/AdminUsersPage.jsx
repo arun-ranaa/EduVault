@@ -21,10 +21,10 @@ const AdminUsersPage = () => {
     try {
       setLoading(true);
       const res = await adminAPI.getUsers({ page, search, role: roleFilter });
-      if (res.success) {
-        setUsers(res.data);
-        setTotalPages(res.pagination.pages);
-      }
+      const payload = res.data?.data ?? res.data ?? [];
+      const pagination = res.data?.pagination ?? res.pagination ?? { pages: 1 };
+      setUsers(Array.isArray(payload) ? payload : (payload.data || []));
+      setTotalPages(pagination.pages || 1);
     } catch (error) {
       toast.error('Failed to load users');
     } finally {

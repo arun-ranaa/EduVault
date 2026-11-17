@@ -21,9 +21,8 @@ const AdminCategoriesPage = () => {
     try {
       setLoading(true);
       const res = await adminAPI.getCategories();
-      if (res.success) {
-        setCategories(res.data);
-      }
+      const payload = res.data?.data ?? res.data ?? [];
+      setCategories(Array.isArray(payload) ? payload : (payload.data || []));
     } catch (error) {
       toast.error('Failed to load categories');
     } finally {

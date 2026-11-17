@@ -23,9 +23,8 @@ const AdminResourcesPage = () => {
   const fetchCategories = async () => {
     try {
       const res = await adminAPI.getCategories();
-      if (res.success) {
-        setCategories(res.data || []);
-      }
+      const catData = res.data?.data ?? res.data ?? [];
+      setCategories(Array.isArray(catData) ? catData : []);
     } catch (error) {
       console.error('Failed to load categories', error);
     }
@@ -40,10 +39,10 @@ const AdminResourcesPage = () => {
         category: categoryFilter, 
         type: typeFilter 
       });
-      if (res.success) {
-        setResources(res.data);
-        setTotalPages(res.pagination.pages);
-      }
+      const payload = res.data?.data ?? res.data ?? [];
+      const pagination = res.data?.pagination ?? res.pagination ?? { pages: 1 };
+      setResources(Array.isArray(payload) ? payload : (payload.data || []));
+      setTotalPages(pagination.pages || 1);
     } catch (error) {
       toast.error('Failed to load resources');
     } finally {
