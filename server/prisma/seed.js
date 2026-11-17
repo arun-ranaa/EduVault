@@ -32,7 +32,11 @@ async function main() {
   // Create admin user
   const admin = await prisma.user.upsert({
     where: { email: 'admin@eduvault.com' },
-    update: {},
+    update: {
+      passwordHash: adminPassword,
+      role: 'ADMIN',
+      isActive: true
+    },
     create: {
       name: 'Admin User',
       email: 'admin@eduvault.com',
@@ -45,7 +49,10 @@ async function main() {
   // Create normal users
   const user1 = await prisma.user.upsert({
     where: { email: 'user1@eduvault.com' },
-    update: {},
+    update: {
+      passwordHash: userPassword,
+      isActive: true
+    },
     create: {
       name: 'Test User 1',
       email: 'user1@eduvault.com',
