@@ -30,6 +30,12 @@ const ResourceCard = ({ resource, onBookmarkToggle, isBookmarked }) => {
   const tags = resource.tags || [];
   const displayTags = tags.slice(0, 3);
   const extraTags = tags.length > 3 ? tags.length - 3 : 0;
+
+  const getTagName = (t) => {
+    if (!t) return '';
+    if (typeof t === 'string') return t;
+    return t.tag?.name || t.name || '';
+  };
   
   const typeColor = getResourceTypeColor ? getResourceTypeColor(resource.resourceType) : 'bg-blue-100 text-blue-800';
   const typeLabel = getResourceTypeLabel ? getResourceTypeLabel(resource.resourceType) : resource.resourceType;
@@ -62,7 +68,7 @@ const ResourceCard = ({ resource, onBookmarkToggle, isBookmarked }) => {
           <div className="mt-4 flex flex-wrap gap-2">
             {displayTags.map((tag, idx) => (
               <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                {tag}
+                {getTagName(tag)}
               </span>
             ))}
             {extraTags > 0 && (
@@ -77,7 +83,7 @@ const ResourceCard = ({ resource, onBookmarkToggle, isBookmarked }) => {
       <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between mt-auto rounded-b-xl">
         <div className="flex flex-col">
           <span className="text-xs font-medium text-gray-700 truncate max-w-[120px]">
-            {resource.uploader?.name || 'Unknown User'}
+            {resource.uploadedBy?.name || resource.uploader?.name || 'Unknown User'}
           </span>
           <span className="text-xs text-gray-500">
             {formatDate ? formatDate(resource.createdAt) : new Date(resource.createdAt).toLocaleDateString()}
