@@ -19,7 +19,7 @@ app.use(helmet());
 
 // CORS
 app.use(cors({
-  origin: config.frontendUrl,
+  origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
