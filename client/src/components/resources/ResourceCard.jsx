@@ -14,7 +14,7 @@ const ResourceCard = ({ resource, onBookmarkToggle, isBookmarked }) => {
       const res = await resourceAPI.getDownloadUrl(resource._id || resource.id);
       const downloadUrl = res.data?.data?.downloadUrl || res.data?.downloadUrl;
       if (downloadUrl) {
-        window.open(downloadUrl, '_blank');
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer');
       }
     } catch (error) {
       console.error('Download error:', error);

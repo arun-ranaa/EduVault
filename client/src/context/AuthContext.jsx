@@ -45,11 +45,19 @@ export function AuthProvider({ children }) {
     return response.data;
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('eduvault_token');
-    localStorage.removeItem('eduvault_user');
-    setUser(null);
-    navigate('/login');
+  const logout = useCallback(async () => {
+    try {
+      if (localStorage.getItem('eduvault_token')) {
+        await authAPI.logout();
+      }
+    } catch {
+      // Proceed with local cleanup even if token was already expired
+    } finally {
+      localStorage.removeItem('eduvault_token');
+      localStorage.removeItem('eduvault_user');
+      setUser(null);
+      navigate('/login');
+    }
   }, [navigate]);
 
   const updateUser = useCallback((updatedUser) => {

@@ -53,7 +53,7 @@ const ResourceDetailPage = () => {
       const res = await resourceAPI.getDownloadUrl(id);
       const downloadUrl = res.data?.data?.downloadUrl || res.data?.downloadUrl;
       if (downloadUrl) {
-        window.open(downloadUrl, '_blank');
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer');
         setResource(prev => ({ ...prev, downloadCount: (prev.downloadCount || 0) + 1 }));
       }
     } catch (error) {

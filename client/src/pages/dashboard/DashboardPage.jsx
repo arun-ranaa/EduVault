@@ -32,7 +32,7 @@ const DashboardPage = () => {
       setLoading(true);
       try {
         const [uploadsRes, bookmarksRes, vaultRes, storageRes] = await Promise.all([
-          resourceAPI.getAll({ uploadedBy: user?.id, limit: 5 }), // Using resourceAPI instead of raw axios
+          resourceAPI.getMine({ limit: 5 }),
           bookmarkAPI.getAll({ limit: 1 }),
           vaultAPI.getFiles({ limit: 1 }),
           userAPI.getStorage()

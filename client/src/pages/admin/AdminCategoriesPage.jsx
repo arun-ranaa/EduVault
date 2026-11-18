@@ -61,7 +61,7 @@ const AdminCategoriesPage = () => {
       setModalOpen(false);
       fetchCategories();
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to save category');
+      toast.error(error.response?.data?.message || error.response?.data?.error || 'Failed to save category');
     } finally {
       setSubmitting(false);
     }
@@ -78,7 +78,7 @@ const AdminCategoriesPage = () => {
       toast.success('Category deleted successfully');
       fetchCategories();
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to delete category. It might be in use.');
+      toast.error(error.response?.data?.message || error.response?.data?.error || 'Failed to delete category. It might be in use.');
     } finally {
       setDeleteModalOpen(false);
       setCategoryToDelete(null);

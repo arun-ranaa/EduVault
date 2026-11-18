@@ -138,7 +138,7 @@ const VaultPage = () => {
       const res = await vaultAPI.getDownloadUrl(file.id);
       const downloadUrl = res.data?.data?.downloadUrl;
       if (downloadUrl) {
-        window.open(downloadUrl, '_blank');
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer');
       }
     } catch (error) {
       toast.error('Failed to get download link');

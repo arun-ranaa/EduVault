@@ -74,7 +74,7 @@ const AdminStoragePage = () => {
           </div>
           
           <div className="pt-4 border-t border-primary-500/30">
-            <p className="text-sm opacity-90">Total Users: <span className="font-bold">{userStorage.length}</span></p>
+            <p className="text-sm opacity-90">Total Users: <span className="font-bold">{storageData.totalUsers ?? userStorage.length}</span></p>
           </div>
         </div>
         

@@ -124,9 +124,13 @@ const LoginPage = () => {
             </label>
           </div>
           <div className="text-sm">
-            <a href="#" className="font-medium text-primary-600 hover:text-primary-500">
+            <button
+              type="button"
+              onClick={() => toast('Please contact your administrator to reset your password.', { icon: 'ℹ️' })}
+              className="font-medium text-primary-600 hover:text-primary-500"
+            >
               Forgot your password?
-            </a>
+            </button>
           </div>
         </div>
 

@@ -111,6 +111,8 @@ export const getActivityLabel = (action) => {
   const labels = {
     USER_REGISTERED: 'User Registered',
     USER_LOGIN: 'User Login',
+    USER_STATUS_UPDATED: 'User Status Updated',
+    USER_QUOTA_UPDATED: 'User Quota Updated',
     RESOURCE_UPLOADED: 'Resource Uploaded',
     RESOURCE_DELETED: 'Resource Deleted',
     VAULT_FILE_UPLOADED: 'Vault File Uploaded',
@@ -128,6 +130,8 @@ export const getActivityColor = (action) => {
   const colors = {
     USER_REGISTERED: 'bg-green-100 text-green-800',
     USER_LOGIN: 'bg-blue-100 text-blue-800',
+    USER_STATUS_UPDATED: 'bg-amber-100 text-amber-800',
+    USER_QUOTA_UPDATED: 'bg-sky-100 text-sky-800',
     RESOURCE_UPLOADED: 'bg-indigo-100 text-indigo-800',
     RESOURCE_DELETED: 'bg-red-100 text-red-800',
     VAULT_FILE_UPLOADED: 'bg-purple-100 text-purple-800',

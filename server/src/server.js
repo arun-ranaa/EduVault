@@ -4,15 +4,16 @@ const config = require('./config');
 const prisma = require('./config/database');
 
 const PORT = config.port || 5000;
+const HOST = config.host || '127.0.0.1';
 
 async function startServer() {
   try {
     // Test database connection
     await prisma.$connect();
     console.log('✅ Database connected successfully');
-    
-    app.listen(PORT, () => {
-      console.log(`🚀 EduVault server running on port ${PORT}`);
+
+    app.listen(PORT, HOST, () => {
+      console.log(`🚀 EduVault server running on ${HOST}:${PORT}`);
       console.log(`📝 Environment: ${config.nodeEnv}`);
       console.log(`🌐 Frontend URL: ${config.frontendUrl}`);
     });

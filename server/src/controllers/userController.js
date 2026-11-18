@@ -1,5 +1,7 @@
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const prisma = require('../config/database.js');
+const config = require('../config/index');
 const { AppError } = require('../middleware/errorHandler');
 const { getUserStorageUsage } = require('../utils/storageHelper');
 
@@ -56,6 +58,7 @@ const updateProfile = async (req, res, next) => {
         name: true,
         email: true,
         role: true,
+        createdAt: true,
         updatedAt: true
       }
     });
@@ -73,8 +76,6 @@ const updateProfile = async (req, res, next) => {
 const changePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    const jwt = require('jsonwebtoken');
-    const config = require('../config/index');
 
     // Get full user object including passwordHash
     const user = await prisma.user.findUnique({
@@ -85,31 +86,37 @@ const changePassword = async (req, res, next) => {
       return next(new AppError('User not found', 404));
     }
 
-    // Verify current password
+    // Verify current password (return 400 so Axios 401 interceptor does not force-logout the user)
     const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
-    
+
     if (!isPasswordValid) {
-      return next(new AppError('Current password is incorrect', 401));
+      return next(new AppError('Current password is incorrect', 400));
     }
 
     // Hash new password
     const salt = await bcrypt.genSalt(12);
     const newPasswordHash = await bcrypt.hash(newPassword, salt);
 
-    // Update password and revoke all previously issued JWTs
-    await prisma.user.update({
+    // Update password and increment tokenVersion to instantly revoke all previously issued JWTs
+    const updatedUser = await prisma.user.update({
       where: { id: req.user.id },
       data: {
         passwordHash: newPasswordHash,
-        passwordChangedAt: new Date()
+        passwordChangedAt: new Date(),
+        tokenVersion: { increment: 1 }
+      },
+      select: {
+        id: true,
+        role: true,
+        tokenVersion: true
       }
     });
 
-    // Issue a fresh JWT for the current session
+    // Issue a fresh JWT bound to the new tokenVersion for the current session
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: updatedUser.id, role: updatedUser.role, tv: updatedUser.tokenVersion },
       config.jwt.secret,
-      { expiresIn: config.jwt.expiresIn }
+      { expiresIn: config.jwt.expiresIn, algorithm: 'HS256' }
     );
 
     res.status(200).json({

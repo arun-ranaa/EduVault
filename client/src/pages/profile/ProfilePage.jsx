@@ -31,10 +31,10 @@ const ProfilePage = () => {
       }
     };
     
-    if (user) {
+    if (user?.id) {
       fetchProfile();
     }
-  }, [user]);
+  }, [user?.id]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -46,7 +46,7 @@ const ProfilePage = () => {
       setSaving(true);
       const res = await userAPI.updateProfile(formData);
       const updatedProfile = res.data?.data || res.data;
-      setProfile(updatedProfile);
+      setProfile((prev) => ({ ...prev, ...updatedProfile }));
       updateUser(updatedProfile);
       toast.success('Profile updated successfully');
     } catch (error) {

@@ -9,59 +9,23 @@ const { sendVerificationEmail } = require('../utils/emailHelper');
 
 const VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-// Lightweight in-memory store used only to support "Resend verification email".
-// Actual verification is stateless (encrypted inside the link token) and does NOT write to the DB until verified.
-const pendingRegistrations = new Map();
+const hashVerificationToken = (rawToken) =>
+  crypto.createHash('sha256').update(String(rawToken)).digest('hex');
 
-const pruneExpiredPending = () => {
-  const now = Date.now();
-  for (const [email, entry] of pendingRegistrations.entries()) {
-    if (entry.expiresAt <= now) {
-      pendingRegistrations.delete(email);
-    }
-  }
-};
-
-const getEncryptionKey = () =>
-  crypto.createHash('sha256').update(String(config.jwt.secret)).digest();
-
-const createVerificationToken = (payload) => {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv);
-  const data = JSON.stringify({
-    ...payload,
-    purpose: 'email_verification',
-    exp: Date.now() + VERIFY_TOKEN_TTL_MS,
-  });
-  const encrypted = Buffer.concat([cipher.update(data, 'utf8'), cipher.final()]);
-  const authTag = cipher.getAuthTag();
-  return Buffer.concat([iv, authTag, encrypted]).toString('base64url');
-};
-
-const parseVerificationToken = (token) => {
-  try {
-    const raw = Buffer.from(String(token), 'base64url');
-    if (raw.length < 29) return null; // 12 (iv) + 16 (authTag) + >=1 (ciphertext)
-    const iv = raw.subarray(0, 12);
-    const authTag = raw.subarray(12, 28);
-    const encrypted = raw.subarray(28);
-    const decipher = crypto.createDecipheriv('aes-256-gcm', getEncryptionKey(), iv);
-    decipher.setAuthTag(authTag);
-    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
-    const parsed = JSON.parse(decrypted);
-    if (parsed.purpose !== 'email_verification') return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-};
+const generateVerificationToken = () => crypto.randomBytes(32).toString('hex');
 
 const generateToken = (user) => {
   return jwt.sign(
-    { id: user.id, role: user.role },
+    { id: user.id, role: user.role, tv: user.tokenVersion ?? 0 },
     config.jwt.secret,
-    { expiresIn: config.jwt.expiresIn }
+    { expiresIn: config.jwt.expiresIn, algorithm: 'HS256' }
   );
+};
+
+const cleanupExpiredPending = async () => {
+  await prisma.pendingRegistration
+    .deleteMany({ where: { expiresAt: { lte: new Date() } } })
+    .catch(() => {});
 };
 
 const register = async (req, res, next) => {
@@ -70,43 +34,53 @@ const register = async (req, res, next) => {
     const email = req.body.email.trim().toLowerCase();
     const { password } = req.body;
 
-    // Check if a verified/registered user already exists in the database
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
-    });
+    // Generic response prevents account enumeration
+    const genericMessage =
+      'If this email is eligible, a verification link has been sent. Please check your inbox and click the link to complete registration.';
 
-    if (existingUser) {
-      return next(new AppError('Email is already in use', 409));
+    await cleanupExpiredPending();
+
+    const [existingUser, existingPending] = await Promise.all([
+      prisma.user.findUnique({ where: { email }, select: { id: true } }),
+      prisma.pendingRegistration.findUnique({ where: { email }, select: { id: true, expiresAt: true } }),
+    ]);
+
+    // Never reveal existing verified accounts or allow overwriting an active pending registration's passwordHash
+    if (existingUser || (existingPending && existingPending.expiresAt > new Date())) {
+      return res.status(200).json({
+        success: true,
+        message: genericMessage,
+        emailSent: true,
+      });
     }
 
-    // Hash password now so plaintext password is never stored anywhere
+    // Hash password so plaintext password is never persisted anywhere
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Create encrypted, tamper-proof verification token (nothing is written to the database yet)
-    const verifyToken = createVerificationToken({ name, email, passwordHash });
+    // Generate cryptographically random opaque token; store only its SHA-256 hash in DB
+    const rawToken = generateVerificationToken();
+    const tokenHash = hashVerificationToken(rawToken);
+    const expiresAt = new Date(Date.now() + VERIFY_TOKEN_TTL_MS);
 
-    // Send verification email before responding so SMTP errors are caught immediately
+    const pendingRecord = await prisma.pendingRegistration.upsert({
+      where: { email },
+      update: { name, passwordHash, tokenHash, expiresAt },
+      create: { name, email, passwordHash, tokenHash, expiresAt },
+    });
+
     try {
-      await sendVerificationEmail(email, name, verifyToken);
+      await sendVerificationEmail(email, name, rawToken);
     } catch (err) {
+      await prisma.pendingRegistration.delete({ where: { id: pendingRecord.id } }).catch(() => {});
       console.error('Failed to send verification email:', err.message);
       return next(new AppError('Failed to send verification email. Please try again later.', 500));
     }
 
-    // Keep in memory temporarily in case user clicks "Resend email"
-    pruneExpiredPending();
-    pendingRegistrations.set(email, {
-      name,
-      email,
-      passwordHash,
-      expiresAt: Date.now() + VERIFY_TOKEN_TTL_MS,
-    });
-
     res.status(200).json({
       success: true,
-      message: 'Verification email sent! Please check your inbox and click the link to complete registration.',
-      emailSent: true
+      message: genericMessage,
+      emailSent: true,
     });
   } catch (error) {
     next(error);
@@ -115,74 +89,72 @@ const register = async (req, res, next) => {
 
 const verifyEmail = async (req, res, next) => {
   try {
-    const { token } = req.query;
+    const rawToken = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
 
-    if (!token) {
+    if (!rawToken) {
       return next(new AppError('Verification token is required', 400));
     }
 
-    const payload = parseVerificationToken(token);
+    const tokenHash = hashVerificationToken(rawToken);
+    const pending = await prisma.pendingRegistration.findUnique({
+      where: { tokenHash },
+    });
 
-    if (!payload || !payload.email || !payload.name || !payload.passwordHash) {
+    if (!pending) {
       return next(new AppError('Invalid or expired verification link', 400));
     }
 
-    if (Date.now() > payload.exp) {
+    if (pending.expiresAt <= new Date()) {
+      await prisma.pendingRegistration.delete({ where: { id: pending.id } }).catch(() => {});
       return next(new AppError('Verification link has expired. Please register again.', 400));
     }
 
-    const email = payload.email.trim().toLowerCase();
+    const email = pending.email.trim().toLowerCase();
 
-    // If user already completed verification (e.g. clicked link twice)
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
-    });
-
+    const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (existingUser) {
-      pendingRegistrations.delete(email);
+      await prisma.pendingRegistration.delete({ where: { id: pending.id } }).catch(() => {});
       return res.status(200).json({
         success: true,
-        message: 'Email is already verified. You can log in.'
+        message: 'Email is already verified. You can log in.',
       });
     }
 
-    // Only NOW register the user in the database (already verified)
     try {
       await prisma.$transaction(async (tx) => {
         const newUser = await tx.user.create({
           data: {
-            name: payload.name,
+            name: pending.name,
             email,
-            passwordHash: payload.passwordHash,
+            passwordHash: pending.passwordHash,
             isEmailVerified: true,
-          }
+          },
         });
+
+        await tx.pendingRegistration.delete({ where: { id: pending.id } });
 
         await tx.activity.create({
           data: {
             userId: newUser.id,
             action: 'USER_REGISTERED',
-            details: `User ${newUser.name} verified email and registered`
-          }
+            details: `User ${newUser.name} verified email and registered`,
+          },
         });
       });
     } catch (err) {
-      // Handle simultaneous double-click race condition gracefully
       if (err.code === 'P2002') {
-        pendingRegistrations.delete(email);
+        await prisma.pendingRegistration.delete({ where: { id: pending.id } }).catch(() => {});
         return res.status(200).json({
           success: true,
-          message: 'Email is already verified. You can log in.'
+          message: 'Email is already verified. You can log in.',
         });
       }
       throw err;
     }
 
-    pendingRegistrations.delete(email);
-
     res.status(200).json({
       success: true,
-      message: 'Email verified and account registered successfully! You can now log in.'
+      message: 'Email verified and account registered successfully! You can now log in.',
     });
   } catch (error) {
     next(error);
@@ -191,44 +163,44 @@ const verifyEmail = async (req, res, next) => {
 
 const resendVerification = async (req, res, next) => {
   try {
-    const rawEmail = req.body.email;
+    const email = req.body.email.trim().toLowerCase();
+    const genericMessage =
+      'If a pending verification exists for this email, a new verification link has been sent.';
 
-    if (!rawEmail) {
-      return next(new AppError('Email is required', 400));
+    await cleanupExpiredPending();
+
+    const [existingUser, pending] = await Promise.all([
+      prisma.user.findUnique({ where: { email }, select: { id: true } }),
+      prisma.pendingRegistration.findUnique({ where: { email } }),
+    ]);
+
+    if (existingUser || !pending || pending.expiresAt <= new Date()) {
+      return res.status(200).json({
+        success: true,
+        message: genericMessage,
+      });
     }
 
-    const email = rawEmail.trim().toLowerCase();
+    // Rotate opaque token while keeping the original passwordHash untouched
+    const rawToken = generateVerificationToken();
+    const tokenHash = hashVerificationToken(rawToken);
+    const expiresAt = new Date(Date.now() + VERIFY_TOKEN_TTL_MS);
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return next(new AppError('This email is already verified. You can log in.', 400));
-    }
-
-    pruneExpiredPending();
-    const pending = pendingRegistrations.get(email);
-
-    if (!pending) {
-      return next(new AppError('No pending verification found for this email. Please register again.', 400));
-    }
-
-    const verifyToken = createVerificationToken({
-      name: pending.name,
-      email: pending.email,
-      passwordHash: pending.passwordHash,
+    await prisma.pendingRegistration.update({
+      where: { id: pending.id },
+      data: { tokenHash, expiresAt },
     });
 
     try {
-      await sendVerificationEmail(pending.email, pending.name, verifyToken);
+      await sendVerificationEmail(pending.email, pending.name, rawToken);
     } catch (err) {
       console.error('Failed to resend verification email:', err.message);
       return next(new AppError('Failed to resend verification email. Please try again.', 500));
     }
 
-    pending.expiresAt = Date.now() + VERIFY_TOKEN_TTL_MS;
-
     res.status(200).json({
       success: true,
-      message: 'Verification email resent! Please check your inbox.'
+      message: genericMessage,
     });
   } catch (error) {
     next(error);
@@ -242,7 +214,7 @@ const login = async (req, res, next) => {
 
     // Find user
     const user = await prisma.user.findUnique({
-      where: { email }
+      where: { email },
     });
 
     if (!user) {
@@ -271,8 +243,8 @@ const login = async (req, res, next) => {
       data: {
         userId: user.id,
         action: 'USER_LOGIN',
-        details: `User ${user.name} logged in`
-      }
+        details: `User ${user.name} logged in`,
+      },
     });
 
     // Generate token
@@ -289,8 +261,25 @@ const login = async (req, res, next) => {
         role: user.role,
         storageQuota: Number(user.storageQuota),
         storageUsed: usage.totalBytes,
-        createdAt: user.createdAt
-      }
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const logout = async (req, res, next) => {
+  try {
+    // Increment tokenVersion to immediately revoke all active JWTs for this user
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { tokenVersion: { increment: 1 } },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully',
     });
   } catch (error) {
     next(error);
@@ -303,24 +292,24 @@ const getMe = async (req, res, next) => {
 
     const [dbUser, usage] = await Promise.all([
       prisma.user.findUnique({
-        where: { id: user.id }
+        where: { id: user.id },
       }),
-      getUserStorageUsage(user.id)
+      getUserStorageUsage(user.id),
     ]);
 
     if (!dbUser) {
       return next(new AppError('User not found', 404));
     }
 
-    const { passwordHash, emailVerifyToken, emailVerifyExpiry, ...userWithoutSensitive } = dbUser;
+    const { passwordHash, emailVerifyToken, emailVerifyExpiry, tokenVersion, ...userWithoutSensitive } = dbUser;
 
     res.status(200).json({
       success: true,
       user: {
         ...userWithoutSensitive,
         storageQuota: Number(dbUser.storageQuota),
-        storageUsed: usage.totalBytes
-      }
+        storageUsed: usage.totalBytes,
+      },
     });
   } catch (error) {
     next(error);
@@ -332,5 +321,6 @@ module.exports = {
   verifyEmail,
   resendVerification,
   login,
-  getMe
+  logout,
+  getMe,
 };

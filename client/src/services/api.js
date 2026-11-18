@@ -25,7 +25,11 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const requestUrl = error.config?.url || '';
+    const isAuthOrPasswordCheck =
+      requestUrl.includes('/auth/login') || requestUrl.includes('/users/me/password');
+
+    if (error.response?.status === 401 && !isAuthOrPasswordCheck) {
       localStorage.removeItem('eduvault_token');
       localStorage.removeItem('eduvault_user');
       // Only redirect if not already on login page
@@ -41,8 +45,9 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
+  logout: () => api.post('/auth/logout'),
   getMe: () => api.get('/auth/me'),
-  verifyEmail: (token) => api.get(`/auth/verify-email?token=${encodeURIComponent(token)}`),
+  verifyEmail: (token) => api.post('/auth/verify-email', { token }),
   resendVerification: (email) => api.post('/auth/resend-verification', { email }),
 };
 

@@ -1,12 +1,13 @@
 const prisma = require('../config/database');
+const config = require('../config/index');
 const { AppError } = require('../middleware/errorHandler');
 const s3Service = require('../services/s3Service');
 
 const getResourceDownloadUrl = async (req, res, next) => {
     try {
-        const id = parseInt(req.params.id);
+        const id = parseInt(req.params.id, 10);
         if (isNaN(id)) throw new AppError('Invalid resource ID', 400);
-        
+
         const resource = await prisma.resource.findUnique({
             where: { id }
         });
@@ -23,7 +24,7 @@ const getResourceDownloadUrl = async (req, res, next) => {
 
         const downloadUrl = await s3Service.generateDownloadPresignedUrl(
             resource.s3Key,
-            3600, // Expires in 1 hour
+            config.upload.downloadPresignedUrlExpiry || 120,
             resource.fileName
         );
 

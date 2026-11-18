@@ -6,18 +6,22 @@ const { AppError } = require('./errorHandler');
 const authenticate = async (req, res, next) => {
   try {
     let token;
-    
+
     // Check if token exists in Authorization header
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      token = req.headers.authorization.slice(7).trim();
     }
-    
+
     if (!token) {
       return next(new AppError('You are not logged in. Please log in to get access.', 401));
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, config.jwt.secret);
+    // Verify token with explicit algorithm pinning
+    const decoded = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] });
+
+    if (typeof decoded.id !== 'number' || !Number.isInteger(decoded.id)) {
+      return next(new AppError('Invalid token payload. Please log in again.', 401));
+    }
 
     // Find user
     const currentUser = await prisma.user.findUnique({
@@ -32,18 +36,19 @@ const authenticate = async (req, res, next) => {
       return next(new AppError('Your account has been deactivated.', 403));
     }
 
-    // Reject tokens issued before the user's most recent password change
-    if (currentUser.passwordChangedAt && decoded.iat) {
-      const changedTimestamp = Math.floor(currentUser.passwordChangedAt.getTime() / 1000);
-      if (decoded.iat < changedTimestamp - 1) {
-        return next(new AppError('Password was recently changed. Please log in again.', 401));
-      }
+    if (!currentUser.isEmailVerified) {
+      return next(new AppError('Please verify your email address before accessing your account.', 403));
+    }
+
+    // Exact tokenVersion match instantly revokes sessions on logout, password change, or admin deactivation
+    if (typeof decoded.tv !== 'number' || decoded.tv !== currentUser.tokenVersion) {
+      return next(new AppError('Session is no longer valid. Please log in again.', 401));
     }
 
     // Attach user to request, excluding sensitive fields
     const { passwordHash, emailVerifyToken, emailVerifyExpiry, ...safeUser } = currentUser;
     req.user = safeUser;
-    
+
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {

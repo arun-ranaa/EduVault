@@ -200,7 +200,7 @@ const AdminUsersPage = () => {
                 <input 
                   type="number" 
                   step="0.1"
-                  min="0.1"
+                  min="0"
                   value={newQuotaGB} 
                   onChange={e => setNewQuotaGB(e.target.value)} 
                   className="input-field" 

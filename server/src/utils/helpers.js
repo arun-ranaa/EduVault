@@ -7,7 +7,22 @@ const formatFileSize = (bytes) => {
 };
 
 const sanitizeFileName = (fileName) => {
-  return fileName.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+  return String(fileName || 'file')
+    .replace(/[^a-zA-Z0-9.\-_]/g, '_')
+    .replace(/\.{2,}/g, '_')
+    .replace(/^\.+/, '_')
+    .slice(0, 200) || 'file';
+};
+
+const asTrimmedString = (value, maxLength = 255) => {
+  if (typeof value !== 'string') return '';
+  return value.trim().slice(0, maxLength);
+};
+
+const asValidEnum = (value, allowedValues) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return allowedValues.has(trimmed) ? trimmed : null;
 };
 
 const serializeBigInt = (obj) => {
@@ -44,6 +59,8 @@ const buildPaginationResponse = (total, page = 1, limit = 10) => {
 module.exports = {
   formatFileSize,
   sanitizeFileName,
+  asTrimmedString,
+  asValidEnum,
   serializeBigInt,
   paginate,
   buildPaginationResponse,

@@ -1,30 +1,40 @@
 require('dotenv').config();
 
 const nodeEnv = process.env.NODE_ENV || 'development';
+const isDevOrTest = nodeEnv === 'development' || nodeEnv === 'test';
 const jwtSecret = process.env.JWT_SECRET;
 
-if (nodeEnv === 'production' && (!jwtSecret || jwtSecret.length < 16)) {
-  throw new Error('FATAL: JWT_SECRET environment variable must be set (min 16 chars) in production.');
+if (!isDevOrTest && (!jwtSecret || jwtSecret.length < 32)) {
+  throw new Error('FATAL: JWT_SECRET environment variable must be set (min 32 characters) in production.');
+}
+
+if (isDevOrTest && (!jwtSecret || jwtSecret.length < 16)) {
+  throw new Error('FATAL: JWT_SECRET environment variable must be set (min 16 characters in development, min 32 in production).');
 }
 
 const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '');
 
 const buildAllowedOrigins = () => {
-  const origins = new Set([
-    frontendUrl,
-    'https://eduvaults.duckdns.org',
-    'http://eduvaults.duckdns.org',
-    'http://3.6.182.140',
-  ]);
+  const origins = new Set();
+
+  const addOrigin = (rawOrigin) => {
+    if (!rawOrigin) return;
+    const normalized = rawOrigin.trim().replace(/\/+$/, '');
+    if (!normalized) return;
+    // Block insecure HTTP origins in production
+    if (!isDevOrTest && normalized.startsWith('http://')) {
+      return;
+    }
+    origins.add(normalized);
+  };
+
+  addOrigin(frontendUrl);
 
   if (process.env.CORS_ORIGINS) {
-    process.env.CORS_ORIGINS.split(',')
-      .map((o) => o.trim().replace(/\/+$/, ''))
-      .filter(Boolean)
-      .forEach((o) => origins.add(o));
+    process.env.CORS_ORIGINS.split(',').forEach(addOrigin);
   }
 
-  if (nodeEnv !== 'production') {
+  if (isDevOrTest) {
     origins.add('http://localhost:5173');
     origins.add('http://127.0.0.1:5173');
   }
@@ -33,11 +43,12 @@ const buildAllowedOrigins = () => {
 };
 
 module.exports = {
-  port: process.env.PORT || 5000,
+  port: parseInt(process.env.PORT, 10) || 5000,
+  host: process.env.HOST || '127.0.0.1',
   nodeEnv,
   jwt: {
-    secret: jwtSecret || 'dev-only-insecure-secret',
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    secret: jwtSecret,
+    expiresIn: process.env.JWT_EXPIRES_IN || '1d',
   },
   aws: {
     region: process.env.AWS_REGION || 'ap-south-1',
@@ -48,15 +59,17 @@ module.exports = {
   frontendUrl,
   corsOrigins: buildAllowedOrigins(),
   upload: {
-    maxFileSize: null, // No per-file size limit (bounded by user's storage quota)
+    maxFileSize: 5 * 1024 * 1024 * 1024, // 5 GB S3 single-PUT hard cap (further bounded by user quota)
     maxVaultStorage: parseInt(process.env.MAX_VAULT_STORAGE, 10) || 5368709120,
-    presignedUrlExpiry: parseInt(process.env.PRESIGNED_URL_EXPIRY, 10) || 3600,
+    uploadPresignedUrlExpiry: Math.min(parseInt(process.env.UPLOAD_PRESIGNED_URL_EXPIRY, 10) || 300, 900),
+    downloadPresignedUrlExpiry: Math.min(parseInt(process.env.DOWNLOAD_PRESIGNED_URL_EXPIRY, 10) || 120, 300),
+    presignedUrlExpiry: Math.min(parseInt(process.env.PRESIGNED_URL_EXPIRY, 10) || 300, 900),
   },
   allowedFileTypes: [
-    // Documents, E-Books & Data
+    // Documents, E-Books & Data (.xml excluded to prevent XSS/XXE vectors)
     '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt',
     '.csv', '.md', '.rtf', '.epub', '.odt', '.ods', '.odp',
-    '.json', '.xml', '.yaml', '.yml',
+    '.json', '.yaml', '.yml',
     // Archives & Project Bundles
     '.zip', '.rar', '.7z', '.tar', '.gz',
     // Images
@@ -85,8 +98,6 @@ module.exports = {
     'application/vnd.oasis.opendocument.spreadsheet',
     'application/vnd.oasis.opendocument.presentation',
     'application/json',
-    'application/xml',
-    'text/xml',
     'application/x-yaml',
     'text/yaml',
     // Archives

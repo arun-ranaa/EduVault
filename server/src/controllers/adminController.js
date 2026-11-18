@@ -1,7 +1,13 @@
 const prisma = require('../config/database');
 const s3Service = require('../services/s3Service');
 const { AppError } = require('../middleware/errorHandler');
-const { serializeBigInt, paginate, buildPaginationResponse } = require('../utils/helpers');
+const {
+  asTrimmedString,
+  asValidEnum,
+  serializeBigInt,
+  paginate,
+  buildPaginationResponse,
+} = require('../utils/helpers');
 const {
   getUsersStorageUsageMap,
   getUserStorageUsage,
@@ -9,9 +15,39 @@ const {
   syncUserStorageUsed,
 } = require('../utils/storageHelper');
 const {
+  RESOURCE_TYPES,
   getCategoriesWithCounts,
   buildCategoryFilterCondition,
 } = require('../utils/categoryHelper');
+
+const VALID_ROLES = new Set(['USER', 'ADMIN']);
+const VALID_RESOURCE_TYPES = new Set(RESOURCE_TYPES);
+const VALID_ACTIVITY_TYPES = new Set([
+  'USER_REGISTERED',
+  'USER_LOGIN',
+  'USER_STATUS_UPDATED',
+  'USER_QUOTA_UPDATED',
+  'RESOURCE_UPLOADED',
+  'RESOURCE_DELETED',
+  'VAULT_FILE_UPLOADED',
+  'VAULT_FILE_DELETED',
+  'BOOKMARK_ADDED',
+  'BOOKMARK_REMOVED',
+  'CATEGORY_CREATED',
+  'CATEGORY_UPDATED',
+  'CATEGORY_DELETED',
+]);
+
+const ACTIVITY_GROUP_MAP = {
+  USER: ['USER_REGISTERED', 'USER_LOGIN', 'BOOKMARK_ADDED', 'BOOKMARK_REMOVED'],
+  RESOURCE: ['RESOURCE_UPLOADED', 'RESOURCE_DELETED'],
+  VAULT: ['VAULT_FILE_UPLOADED', 'VAULT_FILE_DELETED'],
+  ADMIN: ['USER_STATUS_UPDATED', 'USER_QUOTA_UPDATED', 'CATEGORY_CREATED', 'CATEGORY_UPDATED', 'CATEGORY_DELETED'],
+};
+
+// 100 TB safe upper bound (well within JS Number.MAX_SAFE_INTEGER and MySQL BIGINT)
+const MAX_QUOTA_BYTES = 100 * 1024 * 1024 * 1024 * 1024;
+const MAX_STORAGE_BREAKDOWN_LIMIT = 200;
 
 exports.getDashboardStats = async (req, res, next) => {
   try {
@@ -67,7 +103,9 @@ exports.getDashboardStats = async (req, res, next) => {
 
 exports.getUsers = async (req, res, next) => {
   try {
-    const { page, limit, search, role } = req.query;
+    const { page, limit } = req.query;
+    const search = asTrimmedString(req.query.search, 200);
+    const role = asValidEnum(req.query.role, VALID_ROLES);
     const { skip, take } = paginate(page, limit);
 
     const where = {};
@@ -124,7 +162,7 @@ exports.getUsers = async (req, res, next) => {
 
 exports.getUserById = async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid user ID', 400);
 
     const [user, usage] = await Promise.all([
@@ -169,7 +207,7 @@ exports.getUserById = async (req, res, next) => {
 
 exports.toggleUserStatus = async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid user ID', 400);
 
     if (id === req.user.id) {
@@ -179,10 +217,29 @@ exports.toggleUserStatus = async (req, res, next) => {
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) throw new AppError('User not found', 404);
 
-    const updatedUser = await prisma.user.update({
-      where: { id },
-      data: { isActive: !user.isActive },
-      select: { id: true, name: true, email: true, role: true, isActive: true },
+    const nextActive = !user.isActive;
+
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id },
+        data: {
+          isActive: nextActive,
+          // Immediately revoke active tokens when deactivating a user
+          ...(!nextActive ? { tokenVersion: { increment: 1 } } : {}),
+        },
+        select: { id: true, name: true, email: true, role: true, isActive: true },
+      });
+
+      await tx.activity.create({
+        data: {
+          action: 'USER_STATUS_UPDATED',
+          userId: req.user.id,
+          details: `Admin ${nextActive ? 'activated' : 'deactivated'} user: ${updated.email}`,
+          metadata: { targetUserId: updated.id, targetEmail: updated.email, isActive: nextActive },
+        },
+      });
+
+      return updated;
     });
 
     res.status(200).json({
@@ -196,21 +253,43 @@ exports.toggleUserStatus = async (req, res, next) => {
 
 exports.updateUserQuota = async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid user ID', 400);
 
     const { storageQuota } = req.body;
     const numericQuota = Number(storageQuota);
 
-    if (storageQuota === undefined || isNaN(numericQuota) || numericQuota <= 0) {
+    if (
+      storageQuota === undefined ||
+      storageQuota === null ||
+      storageQuota === '' ||
+      !Number.isFinite(numericQuota) ||
+      numericQuota < 0 ||
+      numericQuota > MAX_QUOTA_BYTES
+    ) {
       throw new AppError('Invalid storage quota', 400);
     }
 
+    const roundedQuota = Math.round(numericQuota);
+
     const [updatedUser, usage] = await Promise.all([
-      prisma.user.update({
-        where: { id },
-        data: { storageQuota: BigInt(Math.round(numericQuota)) },
-        select: { id: true, name: true, email: true, storageQuota: true, storageUsed: true },
+      prisma.$transaction(async (tx) => {
+        const updated = await tx.user.update({
+          where: { id },
+          data: { storageQuota: BigInt(roundedQuota) },
+          select: { id: true, name: true, email: true, storageQuota: true, storageUsed: true },
+        });
+
+        await tx.activity.create({
+          data: {
+            action: 'USER_QUOTA_UPDATED',
+            userId: req.user.id,
+            details: `Admin updated storage quota for ${updated.email} to ${roundedQuota} bytes`,
+            metadata: { targetUserId: updated.id, targetEmail: updated.email, storageQuota: roundedQuota },
+          },
+        });
+
+        return updated;
       }),
       getUserStorageUsage(id),
     ]);
@@ -229,7 +308,10 @@ exports.updateUserQuota = async (req, res, next) => {
 
 exports.getAdminResources = async (req, res, next) => {
   try {
-    const { page, limit, search, category, resourceType, type } = req.query;
+    const { page, limit } = req.query;
+    const search = asTrimmedString(req.query.search, 200);
+    const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
+    const effectiveResourceType = asValidEnum(req.query.resourceType || req.query.type, VALID_RESOURCE_TYPES);
     const { skip, take } = paginate(page, limit);
 
     const where = {};
@@ -252,7 +334,6 @@ exports.getAdminResources = async (req, res, next) => {
       where.AND = andConditions;
     }
 
-    const effectiveResourceType = resourceType || type;
     if (effectiveResourceType) {
       where.resourceType = effectiveResourceType;
     }
@@ -284,7 +365,7 @@ exports.getAdminResources = async (req, res, next) => {
 
 exports.deleteAdminResource = async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid resource ID', 400);
 
     const resource = await prisma.resource.findUnique({ where: { id } });
@@ -356,7 +437,7 @@ exports.createCategory = async (req, res, next) => {
 
 exports.updateCategory = async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid category ID', 400);
 
     const { name, description } = req.body;
@@ -391,7 +472,7 @@ exports.updateCategory = async (req, res, next) => {
 
 exports.deleteCategory = async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid category ID', 400);
 
     const category = await prisma.category.findUnique({
@@ -424,11 +505,17 @@ exports.deleteCategory = async (req, res, next) => {
 
 exports.getActivities = async (req, res, next) => {
   try {
-    const { page, limit, action } = req.query;
+    const { page, limit } = req.query;
+    const action = asValidEnum(req.query.action, VALID_ACTIVITY_TYPES);
+    const groupType = typeof req.query.type === 'string' ? req.query.type.trim().toUpperCase() : '';
     const { skip, take } = paginate(page, limit);
 
     const where = {};
-    if (action) where.action = action;
+    if (action) {
+      where.action = action;
+    } else if (groupType && ACTIVITY_GROUP_MAP[groupType]) {
+      where.action = { in: ACTIVITY_GROUP_MAP[groupType] };
+    }
 
     const [total, activities] = await Promise.all([
       prisma.activity.count({ where }),
@@ -455,29 +542,33 @@ exports.getActivities = async (req, res, next) => {
 
 exports.getStorageStats = async (req, res, next) => {
   try {
-    const [users, usageMap] = await Promise.all([
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 50), MAX_STORAGE_BREAKDOWN_LIMIT);
+    const skip = (page - 1) * limit;
+
+    const [totalUsers, quotaAgg, storageTotals, users] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.aggregate({ _sum: { storageQuota: true } }),
+      getTotalPlatformStorageUsed(),
       prisma.user.findMany({
+        skip,
+        take: limit,
+        orderBy: { storageUsed: 'desc' },
         select: { id: true, name: true, email: true, storageUsed: true, storageQuota: true },
       }),
-      getUsersStorageUsageMap(),
     ]);
 
-    let totalUsed = 0;
-    let totalQuota = 0;
+    const usageMap = await getUsersStorageUsageMap(users.map((u) => u.id));
 
     const userBreakdown = users
       .map(user => {
         const usage = usageMap.get(user.id) || { resourceBytes: 0, vaultBytes: 0, totalBytes: 0 };
-        const used = usage.totalBytes;
-        const quota = Number(user.storageQuota || 0);
-        totalUsed += used;
-        totalQuota += quota;
         return {
           ...user,
-          storageUsed: used,
+          storageUsed: usage.totalBytes,
           resourceStorageUsed: usage.resourceBytes,
           vaultStorageUsed: usage.vaultBytes,
-          storageQuota: quota,
+          storageQuota: Number(user.storageQuota ?? 0),
         };
       })
       .sort((a, b) => b.storageUsed - a.storageUsed);
@@ -485,9 +576,16 @@ exports.getStorageStats = async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: {
-        totalUsed,
-        totalQuota,
+        totalUsed: storageTotals.totalBytes,
+        totalQuota: Number(quotaAgg._sum.storageQuota || 0),
+        totalUsers,
         userBreakdown,
+      },
+      pagination: {
+        page,
+        limit,
+        total: totalUsers,
+        pages: Math.ceil(totalUsers / limit),
       },
     });
   } catch (error) {

@@ -26,30 +26,46 @@ async function main() {
     console.log(`Seeded category: ${name}`);
   }
 
-  // Only reset existing admin password when ADMIN_SEED_PASSWORD is explicitly provided
+  // Require explicit ADMIN_SEED_PASSWORD when creating/updating admin (never use hardcoded default credentials)
   const envAdminPassword = process.env.ADMIN_SEED_PASSWORD;
-  const adminEmail = process.env.ADMIN_SEED_EMAIL || 'admin@eduvault.com';
-  const initialPassword = envAdminPassword || 'Admin@123';
-  const adminPasswordHash = await bcrypt.hash(initialPassword, 12);
+  const adminEmail = (process.env.ADMIN_SEED_EMAIL || 'admin@eduvault.com').trim().toLowerCase();
 
-  const updateData = {
-    role: 'ADMIN',
-    isActive: true,
-    isEmailVerified: true,
-    ...(envAdminPassword ? { passwordHash: adminPasswordHash } : {}),
-  };
+  const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
 
-  const admin = await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: updateData,
-    create: {
-      name: 'Admin User',
-      email: adminEmail,
-      passwordHash: adminPasswordHash,
-      role: 'ADMIN',
-      isEmailVerified: true,
-    },
-  });
+  if (!existingAdmin && (!envAdminPassword || envAdminPassword.length < 12)) {
+    throw new Error(
+      'ADMIN_SEED_PASSWORD (min 12 characters) must be set in environment variables to create the initial admin user.'
+    );
+  }
+
+  if (envAdminPassword && envAdminPassword.length < 12) {
+    throw new Error('ADMIN_SEED_PASSWORD must be at least 12 characters long.');
+  }
+
+  const adminPasswordHash = envAdminPassword ? await bcrypt.hash(envAdminPassword, 12) : undefined;
+
+  const admin = existingAdmin
+    ? await prisma.user.update({
+        where: { email: adminEmail },
+        data: {
+          role: 'ADMIN',
+          isActive: true,
+          isEmailVerified: true,
+          ...(adminPasswordHash
+            ? { passwordHash: adminPasswordHash, passwordChangedAt: new Date(), tokenVersion: { increment: 1 } }
+            : {}),
+        },
+      })
+    : await prisma.user.create({
+        data: {
+          name: 'Admin User',
+          email: adminEmail,
+          passwordHash: adminPasswordHash,
+          role: 'ADMIN',
+          isActive: true,
+          isEmailVerified: true,
+        },
+      });
   console.log(`Seeded Admin user: ${admin.email} (password unchanged unless ADMIN_SEED_PASSWORD was provided)`);
 
   console.log('Seeding finished.');

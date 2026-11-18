@@ -1,3 +1,5 @@
+const config = require('../config/index');
+
 class AppError extends Error {
   constructor(message, statusCode) {
     super(message);
@@ -12,20 +14,23 @@ class AppError extends Error {
 const errorHandler = (err, req, res, next) => {
   err.statusCode = err.statusCode || 500;
   err.status = err.status || 'error';
-  
+
   let error = { ...err };
   error.message = err.message;
   error.name = err.name;
-  
-  // Prisma Errors
+
+  // Prisma Errors (MySQL meta.target is a string; Postgres is an array)
   if (err.code === 'P2002') {
-    const target = err.meta?.target ? err.meta.target.join(', ') : 'field';
-    error = new AppError(`Duplicate field value: ${target}. Please use another value!`, 400);
+    const rawTarget = err.meta?.target;
+    const target = Array.isArray(rawTarget)
+      ? rawTarget.join(', ')
+      : (typeof rawTarget === 'string' && rawTarget ? rawTarget : 'field');
+    error = new AppError(`Duplicate field value: ${target}. Please use another value!`, 409);
   }
   if (err.code === 'P2025') {
     error = new AppError('Record not found', 404);
   }
-  
+
   // JWT Errors
   if (err.name === 'JsonWebTokenError') {
     error = new AppError('Invalid token. Please log in again!', 401);
@@ -33,18 +38,9 @@ const errorHandler = (err, req, res, next) => {
   if (err.name === 'TokenExpiredError') {
     error = new AppError('Your token has expired! Please log in again.', 401);
   }
-  
-  // Multer Errors
-  if (err.name === 'MulterError') {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      error = new AppError('File is too large', 400);
-    } else {
-      error = new AppError(err.message, 400);
-    }
-  }
 
   // Development vs Production response
-  if (process.env.NODE_ENV === 'development') {
+  if (config.nodeEnv === 'development') {
     console.error('ERROR 💥', err);
     res.status(error.statusCode).json({
       success: false,
