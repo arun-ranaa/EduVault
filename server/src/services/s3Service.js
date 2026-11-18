@@ -54,6 +54,21 @@ const generateDownloadPresignedUrl = async (
     return getSignedUrl(s3Client, command, { expiresIn });
 };
 
+const generatePreviewPresignedUrl = async (
+    key,
+    contentType,
+    expiresIn = config.upload.presignedUrlExpiry || 3600,
+    originalFileName
+) => {
+    const command = new GetObjectCommand({
+        Bucket: config.aws.s3BucketName,
+        Key: key,
+        ResponseContentDisposition: buildContentDisposition('inline', originalFileName),
+        ResponseContentType: contentType || 'application/octet-stream',
+    });
+    return getSignedUrl(s3Client, command, { expiresIn });
+};
+
 const getS3ObjectMetadata = async (key) => {
     try {
         const command = new HeadObjectCommand({
@@ -404,6 +419,7 @@ const getContentType = (fileName) => {
 module.exports = {
     generateUploadPresignedUrl,
     generateDownloadPresignedUrl,
+    generatePreviewPresignedUrl,
     getS3ObjectMetadata,
     validateS3ObjectSignature,
     validateFileHeaderSignature,

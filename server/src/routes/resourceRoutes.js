@@ -47,6 +47,7 @@ router.get('/', resourceController.getResources);
 router.get('/categories', resourceController.getCategories);
 router.get('/my', resourceController.getMyResources);
 router.get('/:id', resourceController.getResourceById);
+router.get('/:id/preview', downloadLimiter, downloadController.getResourcePreviewUrl);
 router.get('/:id/download', downloadLimiter, downloadController.getResourceDownloadUrl);
 
 router.post('/presign', uploadPresignLimiter, presignRules, validate, resourceController.createResourcePresign);

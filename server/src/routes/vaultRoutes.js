@@ -36,6 +36,7 @@ router.post(
   vaultController.completeVaultUpload
 );
 
+router.get('/:id/preview', downloadLimiter, vaultController.getVaultPreviewUrl);
 router.get('/:id/download', downloadLimiter, vaultController.getVaultDownloadUrl);
 router.delete('/:id', vaultController.deleteVaultFile);
 
