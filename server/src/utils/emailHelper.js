@@ -8,6 +8,14 @@ const transporter = nodemailer.createTransport({
   }
 });
 
+const escapeHtml = (value = '') =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 /**
  * Send email verification link to the user.
  * @param {string} toEmail - Recipient email address
@@ -16,7 +24,8 @@ const transporter = nodemailer.createTransport({
  */
 const sendVerificationEmail = async (toEmail, name, token) => {
   const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '');
-  const verifyUrl = `${baseUrl}/verify-email?token=${token}`;
+  const verifyUrl = `${baseUrl}/verify-email?token=${encodeURIComponent(token)}`;
+  const safeName = escapeHtml(name);
 
   const mailOptions = {
     from: `"EduVault" <${process.env.EMAIL_USER}>`,
@@ -44,7 +53,7 @@ const sendVerificationEmail = async (toEmail, name, token) => {
                   <!-- Body -->
                   <tr>
                     <td style="padding:40px;">
-                      <h2 style="margin:0 0 16px;color:#1e1b4b;font-size:22px;">Hi ${name}, verify your email</h2>
+                      <h2 style="margin:0 0 16px;color:#1e1b4b;font-size:22px;">Hi ${safeName}, verify your email</h2>
                       <p style="margin:0 0 24px;color:#4b5563;font-size:15px;line-height:1.6;">
                         Thanks for signing up! Click the button below to verify your email address and activate your account.
                         This link expires in <strong>24 hours</strong>.

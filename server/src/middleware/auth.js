@@ -32,9 +32,17 @@ const authenticate = async (req, res, next) => {
       return next(new AppError('Your account has been deactivated.', 403));
     }
 
-    // Attach user to request, excluding passwordHash
-    const { passwordHash, ...userWithoutPassword } = currentUser;
-    req.user = userWithoutPassword;
+    // Reject tokens issued before the user's most recent password change
+    if (currentUser.passwordChangedAt && decoded.iat) {
+      const changedTimestamp = Math.floor(currentUser.passwordChangedAt.getTime() / 1000);
+      if (decoded.iat < changedTimestamp - 1) {
+        return next(new AppError('Password was recently changed. Please log in again.', 401));
+      }
+    }
+
+    // Attach user to request, excluding sensitive fields
+    const { passwordHash, emailVerifyToken, emailVerifyExpiry, ...safeUser } = currentUser;
+    req.user = safeUser;
     
     next();
   } catch (error) {

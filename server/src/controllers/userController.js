@@ -73,6 +73,8 @@ const updateProfile = async (req, res, next) => {
 const changePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
+    const jwt = require('jsonwebtoken');
+    const config = require('../config/index');
 
     // Get full user object including passwordHash
     const user = await prisma.user.findUnique({
@@ -94,15 +96,26 @@ const changePassword = async (req, res, next) => {
     const salt = await bcrypt.genSalt(12);
     const newPasswordHash = await bcrypt.hash(newPassword, salt);
 
-    // Update password
+    // Update password and revoke all previously issued JWTs
     await prisma.user.update({
       where: { id: req.user.id },
-      data: { passwordHash: newPasswordHash }
+      data: {
+        passwordHash: newPasswordHash,
+        passwordChangedAt: new Date()
+      }
     });
+
+    // Issue a fresh JWT for the current session
+    const token = jwt.sign(
+      { id: user.id, role: user.role },
+      config.jwt.secret,
+      { expiresIn: config.jwt.expiresIn }
+    );
 
     res.status(200).json({
       success: true,
-      message: 'Password changed successfully'
+      message: 'Password changed successfully',
+      token
     });
   } catch (error) {
     next(error);

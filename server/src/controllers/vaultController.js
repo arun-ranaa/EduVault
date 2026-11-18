@@ -115,17 +115,56 @@ exports.createVaultPresign = async (req, res, next) => {
 
 exports.completeVaultUpload = async (req, res, next) => {
   try {
-    const { fileName, fileType, fileSize, s3Key, folder, name } = req.body;
+    const { fileName, fileType, s3Key, folder, name } = req.body;
+    const expectedPrefix = `private/users/${req.user.id}/`;
+
+    if (!s3Service.isValidS3Key(s3Key, expectedPrefix)) {
+      throw new AppError('Invalid S3 storage key for this vault', 400);
+    }
+
+    if (!s3Service.isAllowedFileType(fileName)) {
+      throw new AppError('File type not allowed. Allowed: ' + config.allowedFileTypes.join(', '), 400);
+    }
+
+    // Ensure s3Key is not already registered by another record
+    const [existingVault, existingResource, s3Meta, user, usage] = await Promise.all([
+      prisma.vaultFile.findFirst({ where: { s3Key }, select: { id: true } }),
+      prisma.resource.findFirst({ where: { s3Key }, select: { id: true } }),
+      s3Service.getS3ObjectMetadata(s3Key),
+      prisma.user.findUnique({ where: { id: req.user.id }, select: { storageQuota: true } }),
+      getUserStorageUsage(req.user.id),
+    ]);
+
+    if (existingVault || existingResource) {
+      throw new AppError('This uploaded file has already been registered', 409);
+    }
+
+    if (!s3Meta || s3Meta.contentLength <= 0) {
+      throw new AppError('Uploaded file was not found in storage. Please upload again.', 400);
+    }
+
+    const actualFileSize = s3Meta.contentLength;
+    const userStorageQuota = Number(user?.storageQuota || config.upload.maxVaultStorage);
+
+    if (usage.totalBytes + actualFileSize > userStorageQuota) {
+      // Clean up oversized S3 object immediately so it doesn't waste storage
+      await s3Service.deleteS3Object(s3Key).catch(() => {});
+      const remaining = Math.max(0, userStorageQuota - usage.totalBytes);
+      const remainingMB = (remaining / (1024 * 1024)).toFixed(1);
+      throw new AppError(`Storage quota exceeded. You have ${remainingMB} MB remaining.`, 413);
+    }
+
+    const resolvedContentType = s3Service.getContentType(fileName) || fileType || 'application/octet-stream';
 
     const newFile = await prisma.$transaction(async (tx) => {
       const file = await tx.vaultFile.create({
         data: {
-          name: name || fileName,
-          fileName,
-          fileType,
-          fileSize: parseInt(fileSize, 10),
+          name: (name || fileName).trim().slice(0, 255),
+          fileName: fileName.trim().slice(0, 255),
+          fileType: resolvedContentType.slice(0, 150),
+          fileSize: actualFileSize,
           s3Key,
-          folder: folder || '/',
+          folder: (folder || '/').trim().slice(0, 255) || '/',
           ownerId: req.user.id,
         },
       });

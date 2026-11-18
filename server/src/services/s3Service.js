@@ -1,4 +1,4 @@
-const { PutObjectCommand, GetObjectCommand, DeleteObjectCommand, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
+const { PutObjectCommand, GetObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, HeadObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { v4: uuidv4 } = require('uuid');
 const s3Client = require('../config/s3');
@@ -13,13 +13,52 @@ const generateUploadPresignedUrl = async (key, contentType, expiresIn = config.u
     return getSignedUrl(s3Client, command, { expiresIn });
 };
 
+const buildContentDisposition = (disposition, originalFileName) => {
+    const fallbackName = String(originalFileName || 'file')
+        .replace(/["\\\r\n]/g, '_')
+        .replace(/[^\x20-\x7E]/g, '_');
+    const encodedName = encodeURIComponent(String(originalFileName || 'file'));
+    return `${disposition}; filename="${fallbackName}"; filename*=UTF-8''${encodedName}`;
+};
+
 const generateDownloadPresignedUrl = async (key, expiresIn = config.upload.presignedUrlExpiry || 3600, originalFileName) => {
     const command = new GetObjectCommand({
         Bucket: config.aws.s3BucketName,
         Key: key,
-        ResponseContentDisposition: `attachment; filename="${originalFileName}"`
+        ResponseContentDisposition: buildContentDisposition('attachment', originalFileName),
     });
     return getSignedUrl(s3Client, command, { expiresIn });
+};
+
+const getS3ObjectMetadata = async (key) => {
+    try {
+        const command = new HeadObjectCommand({
+            Bucket: config.aws.s3BucketName,
+            Key: key,
+        });
+        const response = await s3Client.send(command);
+        return {
+            contentLength: Number(response.ContentLength || 0),
+            contentType: response.ContentType || 'application/octet-stream',
+        };
+    } catch (error) {
+        if (error?.$metadata?.httpStatusCode === 404 || error?.name === 'NotFound' || error?.name === 'NoSuchKey') {
+            return null;
+        }
+        throw error;
+    }
+};
+
+const isValidS3Key = (key, expectedPrefix) => {
+    if (typeof key !== 'string' || !key.trim()) return false;
+    if (key.length > 500) return false;
+    if (key.includes('..') || key.includes('\\') || key.startsWith('/') || /[\r\n\0]/.test(key)) {
+        return false;
+    }
+    if (expectedPrefix && !key.startsWith(expectedPrefix)) {
+        return false;
+    }
+    return true;
 };
 
 const deleteS3Object = async (key) => {
@@ -135,6 +174,8 @@ const getContentType = (fileName) => {
 module.exports = {
     generateUploadPresignedUrl,
     generateDownloadPresignedUrl,
+    getS3ObjectMetadata,
+    isValidS3Key,
     deleteS3Object,
     deleteMultipleS3Objects,
     generateResourceKey,

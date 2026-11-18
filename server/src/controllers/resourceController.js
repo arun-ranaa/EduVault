@@ -22,11 +22,16 @@ const getCategories = async (req, res, next) => {
     }
 };
 
+const ALLOWED_SORT_FIELDS = new Set(['createdAt', 'title', 'downloadCount', 'fileSize']);
+const MAX_RESOURCE_LIMIT = 100;
+
 const getResources = async (req, res, next) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 12;
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 12), MAX_RESOURCE_LIMIT);
         const { search, category, resourceType, subject, tag, sortBy = 'createdAt', order = 'desc' } = req.query;
+        const safeSortBy = ALLOWED_SORT_FIELDS.has(sortBy) ? sortBy : 'createdAt';
+        const safeOrder = order === 'asc' ? 'asc' : 'desc';
 
         const where = {};
         const andConditions = [];
@@ -69,7 +74,7 @@ const getResources = async (req, res, next) => {
                 where,
                 skip,
                 take: limit,
-                orderBy: { [sortBy]: order === 'desc' ? 'desc' : 'asc' },
+                orderBy: { [safeSortBy]: safeOrder },
                 include: {
                     category: true,
                     uploadedBy: { select: { id: true, name: true } },
@@ -190,9 +195,46 @@ const createResourcePresign = async (req, res, next) => {
 
 const completeResourceUpload = async (req, res, next) => {
     try {
-        const { title, description, resourceType, categoryId, semester, tags, fileName, fileType, fileSize, s3Key } = req.body;
+        const { title, description, resourceType, categoryId, semester, tags, fileName, fileType, s3Key } = req.body;
         const userId = req.user.id;
-        const parsedFileSize = parseInt(fileSize, 10);
+
+        if (!s3Service.isValidS3Key(s3Key, 'resources/')) {
+            throw new AppError('Invalid S3 storage key for resource', 400);
+        }
+
+        if (!s3Service.isAllowedFileType(fileName)) {
+            throw new AppError('File type not allowed. Allowed types: ' + config.allowedFileTypes.join(', '), 400);
+        }
+
+        // Verify s3Key is not already registered and fetch true object size from S3
+        const [existingResource, existingVault, s3Meta, user, usage] = await Promise.all([
+            prisma.resource.findFirst({ where: { s3Key }, select: { id: true } }),
+            prisma.vaultFile.findFirst({ where: { s3Key }, select: { id: true } }),
+            s3Service.getS3ObjectMetadata(s3Key),
+            prisma.user.findUnique({ where: { id: userId }, select: { storageQuota: true } }),
+            getUserStorageUsage(userId),
+        ]);
+
+        if (existingResource || existingVault) {
+            throw new AppError('This uploaded file has already been registered', 409);
+        }
+
+        if (!s3Meta || s3Meta.contentLength <= 0) {
+            throw new AppError('Uploaded file was not found in storage. Please upload again.', 400);
+        }
+
+        const actualFileSize = s3Meta.contentLength;
+        const userStorageQuota = Number(user?.storageQuota || config.upload.maxVaultStorage);
+
+        if (usage.totalBytes + actualFileSize > userStorageQuota) {
+            // Remove oversized S3 object immediately
+            await s3Service.deleteS3Object(s3Key).catch(() => {});
+            const remaining = Math.max(0, userStorageQuota - usage.totalBytes);
+            const remainingMB = (remaining / (1024 * 1024)).toFixed(1);
+            throw new AppError(`Storage quota exceeded. You have ${remainingMB} MB remaining.`, 413);
+        }
+
+        const resolvedContentType = s3Service.getContentType(fileName) || fileType || 'application/octet-stream';
 
         const resource = await prisma.$transaction(async (tx) => {
             let resolvedCategoryId = null;
@@ -223,25 +265,30 @@ const completeResourceUpload = async (req, res, next) => {
 
             const newResource = await tx.resource.create({
                 data: {
-                    title,
-                    description: description || null,
+                    title: title.trim().slice(0, 255),
+                    description: description ? String(description).slice(0, 5000) : null,
                     resourceType: derivedResourceType,
                     subject: null,
                     categoryId: resolvedCategoryId,
-                    semester: semester || null,
-                    fileName,
-                    fileType,
-                    fileSize: parsedFileSize,
+                    semester: semester ? String(semester).slice(0, 20) : null,
+                    fileName: fileName.trim().slice(0, 255),
+                    fileType: resolvedContentType.slice(0, 150),
+                    fileSize: actualFileSize,
                     s3Key,
                     uploadedById: userId,
                 }
             });
 
             if (tags && Array.isArray(tags) && tags.length > 0) {
-                for (const tagName of tags) {
-                    const normalizedName = tagName.trim().toLowerCase();
-                    if (!normalizedName) continue;
+                const uniqueTags = Array.from(
+                    new Set(
+                        tags
+                            .map((t) => String(t || '').trim().toLowerCase().slice(0, 50))
+                            .filter(Boolean)
+                    )
+                );
 
+                for (const normalizedName of uniqueTags) {
                     const tag = await tx.tag.upsert({
                         where: { name: normalizedName },
                         update: {},
@@ -337,8 +384,8 @@ const deleteResource = async (req, res, next) => {
 
 const getMyResources = async (req, res, next) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 12;
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 12), MAX_RESOURCE_LIMIT);
         const skip = (page - 1) * limit;
 
         const where = { uploadedById: req.user.id };

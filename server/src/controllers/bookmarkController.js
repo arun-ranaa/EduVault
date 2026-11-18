@@ -1,10 +1,12 @@
 const prisma = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 
+const MAX_BOOKMARK_LIMIT = 500;
+
 const getBookmarks = async (req, res, next) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 12;
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 12), MAX_BOOKMARK_LIMIT);
         const skip = (page - 1) * limit;
 
         const [bookmarks, total] = await Promise.all([
@@ -52,7 +54,7 @@ const getBookmarks = async (req, res, next) => {
 
 const addBookmark = async (req, res, next) => {
     try {
-        const resourceId = parseInt(req.params.resourceId);
+        const resourceId = parseInt(req.params.resourceId, 10);
         if (isNaN(resourceId)) throw new AppError('Invalid resource ID', 400);
         const userId = req.user.id;
 
@@ -97,7 +99,7 @@ const addBookmark = async (req, res, next) => {
 
 const removeBookmark = async (req, res, next) => {
     try {
-        const resourceId = parseInt(req.params.resourceId);
+        const resourceId = parseInt(req.params.resourceId, 10);
         if (isNaN(resourceId)) throw new AppError('Invalid resource ID', 400);
         const userId = req.user.id;
 
@@ -134,7 +136,7 @@ const removeBookmark = async (req, res, next) => {
 
 const checkBookmark = async (req, res, next) => {
     try {
-        const resourceId = parseInt(req.params.resourceId);
+        const resourceId = parseInt(req.params.resourceId, 10);
         if (isNaN(resourceId)) throw new AppError('Invalid resource ID', 400);
         const userId = req.user.id;
 

@@ -27,15 +27,17 @@ const serializeBigInt = (obj) => {
   return obj;
 };
 
+const MAX_PAGE_LIMIT = 100;
+
 const paginate = (page = 1, limit = 10) => {
   const p = Math.max(1, parseInt(page, 10) || 1);
-  const l = Math.max(1, parseInt(limit, 10) || 10);
+  const l = Math.min(Math.max(1, parseInt(limit, 10) || 10), MAX_PAGE_LIMIT);
   return { skip: (p - 1) * l, take: l };
 };
 
 const buildPaginationResponse = (total, page = 1, limit = 10) => {
   const p = Math.max(1, parseInt(page, 10) || 1);
-  const l = Math.max(1, parseInt(limit, 10) || 10);
+  const l = Math.min(Math.max(1, parseInt(limit, 10) || 10), MAX_PAGE_LIMIT);
   return { page: p, limit: l, total, pages: Math.ceil(total / l) };
 };
 

@@ -7,3 +7,5 @@ build
 .vscode
 coverage
 prisma/*.db
+CREDENTIALS.md
+confidential README .md

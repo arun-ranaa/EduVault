@@ -53,11 +53,14 @@ const SettingsPage = () => {
     
     try {
       setSavingPassword(true);
-      await userAPI.changePassword({
+      const res = await userAPI.changePassword({
         currentPassword: passwords.currentPassword,
         newPassword: passwords.newPassword
       });
-      toast.success('Password changed successfully');
+      if (res.data?.token) {
+        localStorage.setItem('eduvault_token', res.data.token);
+      }
+      toast.success('Password changed successfully! Other sessions have been signed out.');
       setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to change password');

@@ -19,6 +19,7 @@ model User {
   isEmailVerified      Boolean      @default(false)
   emailVerifyToken     String?      @unique @db.VarChar(255)
   emailVerifyExpiry    DateTime?
+  passwordChangedAt    DateTime?
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
 

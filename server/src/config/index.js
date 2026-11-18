@@ -1,10 +1,42 @@
 require('dotenv').config();
 
+const nodeEnv = process.env.NODE_ENV || 'development';
+const jwtSecret = process.env.JWT_SECRET;
+
+if (nodeEnv === 'production' && (!jwtSecret || jwtSecret.length < 16)) {
+  throw new Error('FATAL: JWT_SECRET environment variable must be set (min 16 chars) in production.');
+}
+
+const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '');
+
+const buildAllowedOrigins = () => {
+  const origins = new Set([
+    frontendUrl,
+    'https://eduvaults.duckdns.org',
+    'http://eduvaults.duckdns.org',
+    'http://3.6.182.140',
+  ]);
+
+  if (process.env.CORS_ORIGINS) {
+    process.env.CORS_ORIGINS.split(',')
+      .map((o) => o.trim().replace(/\/+$/, ''))
+      .filter(Boolean)
+      .forEach((o) => origins.add(o));
+  }
+
+  if (nodeEnv !== 'production') {
+    origins.add('http://localhost:5173');
+    origins.add('http://127.0.0.1:5173');
+  }
+
+  return Array.from(origins);
+};
+
 module.exports = {
   port: process.env.PORT || 5000,
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   jwt: {
-    secret: process.env.JWT_SECRET || 'default-secret',
+    secret: jwtSecret || 'dev-only-insecure-secret',
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
   aws: {
@@ -13,7 +45,8 @@ module.exports = {
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     s3BucketName: process.env.S3_BUCKET_NAME,
   },
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+  frontendUrl,
+  corsOrigins: buildAllowedOrigins(),
   upload: {
     maxFileSize: null, // No per-file size limit (bounded by user's storage quota)
     maxVaultStorage: parseInt(process.env.MAX_VAULT_STORAGE, 10) || 5368709120,
