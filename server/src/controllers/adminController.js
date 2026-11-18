@@ -15,14 +15,21 @@ const {
 
 exports.getDashboardStats = async (req, res, next) => {
   try {
-    const [totalUsers, totalResources, totalVaultFiles, storageTotals] = await Promise.all([
+    const [totalUsers, totalResources, totalVaultFiles, storageTotals, categoriesWithCounts] = await Promise.all([
       prisma.user.count(),
       prisma.resource.count(),
       prisma.vaultFile.count(),
       getTotalPlatformStorageUsed(),
+      getCategoriesWithCounts(prisma),
     ]);
 
     const totalStorageUsed = storageTotals.totalBytes;
+
+    const resourcesByCategory = categoriesWithCounts.map(cat => ({
+      id: cat.id,
+      name: cat.name,
+      count: cat._count?.resources || 0,
+    }));
 
     const resourcesGrouped = await prisma.resource.groupBy({
       by: ['resourceType'],
@@ -48,6 +55,7 @@ exports.getDashboardStats = async (req, res, next) => {
         totalStorageUsed,
         resourceStorageUsed: storageTotals.resourceBytes,
         vaultStorageUsed: storageTotals.vaultBytes,
+        resourcesByCategory,
         resourcesByType,
         recentActivityCount,
       },

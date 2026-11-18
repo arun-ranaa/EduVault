@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { adminAPI } from '../../services/api';
-import { formatFileSize, formatDate, getResourceTypeLabel, RESOURCE_TYPES } from '../../utils/helpers';
+import { formatFileSize, formatDate } from '../../utils/helpers';
 import { LoadingSpinner, EmptyState, Pagination, SearchBar, ConfirmModal } from '../../components/common';
 import toast from 'react-hot-toast';
 import { HiOutlineBookOpen, HiOutlineTrash, HiOutlineEye } from 'react-icons/hi2';
@@ -15,7 +15,6 @@ const AdminResourcesPage = () => {
   
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
   
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [resourceToDelete, setResourceToDelete] = useState(null);
@@ -36,8 +35,7 @@ const AdminResourcesPage = () => {
       const res = await adminAPI.getResources({ 
         page, 
         search, 
-        category: categoryFilter, 
-        resourceType: typeFilter 
+        category: categoryFilter
       });
       const payload = res.data?.data ?? res.data ?? [];
       const pagination = res.data?.pagination ?? res.pagination ?? { pages: 1 };
@@ -48,7 +46,7 @@ const AdminResourcesPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, search, categoryFilter, typeFilter]);
+  }, [page, search, categoryFilter]);
 
   useEffect(() => {
     fetchCategories();
@@ -88,7 +86,7 @@ const AdminResourcesPage = () => {
           <div className="flex-1">
             <SearchBar onSearch={(q) => { setSearch(q); setPage(1); }} placeholder="Search resources..." />
           </div>
-          <div className="w-full md:w-48">
+          <div className="w-full md:w-56">
             <select 
               value={categoryFilter} 
               onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
@@ -97,18 +95,6 @@ const AdminResourcesPage = () => {
               <option value="">All Categories</option>
               {categories.map(cat => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="w-full md:w-48">
-            <select 
-              value={typeFilter} 
-              onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-              className="input-field py-2"
-            >
-              <option value="">All Types</option>
-              {RESOURCE_TYPES.map(t => (
-                <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
           </div>
@@ -122,7 +108,6 @@ const AdminResourcesPage = () => {
               <thead>
                 <tr className="border-b border-gray-200 text-gray-500 text-sm">
                   <th className="py-3 px-4 font-medium">Title</th>
-                  <th className="py-3 px-4 font-medium">Type</th>
                   <th className="py-3 px-4 font-medium">Category</th>
                   <th className="py-3 px-4 font-medium hidden md:table-cell">Size</th>
                   <th className="py-3 px-4 font-medium hidden md:table-cell">Date</th>
@@ -136,12 +121,9 @@ const AdminResourcesPage = () => {
                       <p className="font-medium text-gray-900 truncate max-w-xs">{resource.title}</p>
                     </td>
                     <td className="py-3 px-4">
-                      <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                        {getResourceTypeLabel(resource.resourceType || resource.type)}
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-primary-50 text-primary-700">
+                        {resource.category?.name || 'Uncategorized'}
                       </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      {resource.category?.name || 'Uncategorized'}
                     </td>
                     <td className="py-3 px-4 hidden md:table-cell text-sm text-gray-500">
                       {formatFileSize(resource.fileSize || 0)}

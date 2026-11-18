@@ -5,32 +5,7 @@ import { resourceAPI, uploadToS3 } from '../../services/api';
 import { formatFileSize } from '../../utils/helpers';
 import toast from 'react-hot-toast';
 
-const ResourceTypes = [
-  { value: 'NOTES', label: 'Notes' },
-  { value: 'BOOK', label: 'Book' },
-  { value: 'QUESTION_PAPER', label: 'Question Paper' },
-  { value: 'ASSIGNMENT', label: 'Assignment' },
-  { value: 'STUDY_MATERIAL', label: 'Study Material' },
-  { value: 'QUESTION_BANK', label: 'Question Bank' },
-  { value: 'LAB_RESOURCE', label: 'Lab Resource' },
-  { value: 'OTHER', label: 'Other' }
-];
-
 const Semesters = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
-
-const normalizeKey = (value = '') =>
-  String(value)
-    .toLowerCase()
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/s$/, '');
-
-const findMatchingCategory = (categoriesList, resourceType) => {
-  if (!resourceType || !Array.isArray(categoriesList)) return null;
-  const targetKey = normalizeKey(resourceType);
-  return categoriesList.find((cat) => normalizeKey(cat.name) === targetKey) || null;
-};
 
 const UploadResourcePage = () => {
   const navigate = useNavigate();
@@ -39,14 +14,11 @@ const UploadResourcePage = () => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    resourceType: 'NOTES',
     categoryId: '',
-    subject: '',
     semester: ''
   });
   
   const [categories, setCategories] = useState([]);
-  const [categoryManuallySelected, setCategoryManuallySelected] = useState(false);
   const [tags, setTags] = useState([]);
   const [tagInput, setTagInput] = useState('');
   const [file, setFile] = useState(null);
@@ -64,11 +36,6 @@ const UploadResourcePage = () => {
       const response = await resourceAPI.getCategories();
       const loadedCategories = response.data?.data || [];
       setCategories(loadedCategories);
-
-      const matched = findMatchingCategory(loadedCategories, 'NOTES');
-      if (matched) {
-        setFormData(prev => (prev.categoryId ? prev : { ...prev, categoryId: String(matched.id) }));
-      }
     } catch (error) {
       console.error('Failed to fetch categories', error);
     }
@@ -76,24 +43,6 @@ const UploadResourcePage = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'categoryId') {
-      setCategoryManuallySelected(true);
-      setFormData(prev => ({ ...prev, categoryId: value }));
-      return;
-    }
-
-    if (name === 'resourceType') {
-      setFormData(prev => {
-        const next = { ...prev, resourceType: value };
-        if (!categoryManuallySelected) {
-          const matched = findMatchingCategory(categories, value);
-          next.categoryId = matched ? String(matched.id) : '';
-        }
-        return next;
-      });
-      return;
-    }
-
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -136,7 +85,7 @@ const UploadResourcePage = () => {
     e.preventDefault();
     
     if (!formData.title.trim()) return toast.error('Title is required');
-    if (!formData.resourceType) return toast.error('Resource type is required');
+    if (!formData.categoryId) return toast.error('Category is required');
     if (tags.length === 0) return toast.error('At least one tag is required');
     if (!file) return toast.error('Please select a file to upload');
 
@@ -152,8 +101,7 @@ const UploadResourcePage = () => {
         fileName: file.name,
         fileSize: file.size,
         fileType: fileType,
-        resourceType: formData.resourceType,
-        categoryId: formData.categoryId || undefined,
+        categoryId: Number(formData.categoryId),
         tags
       };
       
@@ -174,7 +122,10 @@ const UploadResourcePage = () => {
 
       // 3. Complete resource creation in backend
       const completeData = {
-        ...formData,
+        title: formData.title,
+        description: formData.description,
+        categoryId: Number(formData.categoryId),
+        semester: formData.semester,
         tags,
         fileName: file.name,
         fileType: contentType || fileType,
@@ -237,46 +188,20 @@ const UploadResourcePage = () => {
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
-                Resource Type <span className="text-red-500">*</span>
+                Category <span className="text-red-500">*</span>
               </label>
-              <select
-                name="resourceType"
-                value={formData.resourceType}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-md border border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                required
-              >
-                {ResourceTypes.map(type => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">Category</label>
               <select
                 name="categoryId"
                 value={formData.categoryId}
                 onChange={handleChange}
                 className="w-full px-4 py-2 rounded-md border border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                required
               >
                 <option value="">Select Category</option>
                 {categories.map(cat => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
               </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">Subject</label>
-              <input
-                type="text"
-                name="subject"
-                value={formData.subject}
-                onChange={handleChange}
-                placeholder="e.g. Computer Science"
-                className="w-full px-4 py-2 rounded-md border border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-              />
             </div>
 
             <div className="space-y-2">
@@ -400,7 +325,7 @@ const UploadResourcePage = () => {
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2.5">
                 <div 
-                  className="bg-primary-600 h-2.5 rounded-full transition-all duration-300"
+                  className="bg-primary-600 h-2.5 rounded-full transition-all duration-300" 
                   style={{ width: `${uploadProgress}%` }}
                 ></div>
               </div>

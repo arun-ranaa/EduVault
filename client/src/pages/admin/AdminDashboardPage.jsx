@@ -77,9 +77,16 @@ const AdminDashboardPage = () => {
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4 border-b pb-2">Resources by Type</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-4 border-b pb-2">Resources by Category</h2>
           <div className="space-y-4 mt-4">
-            {stats.resourcesByType && stats.resourcesByType.length > 0 ? (
+            {stats.resourcesByCategory && stats.resourcesByCategory.length > 0 ? (
+              stats.resourcesByCategory.map(({ id, name, count }) => (
+                <div key={id} className="flex items-center justify-between">
+                  <span className="text-gray-700 font-medium">{name}</span>
+                  <span className="bg-gray-100 text-gray-800 py-1 px-3 rounded-full text-sm font-bold">{count}</span>
+                </div>
+              ))
+            ) : stats.resourcesByType && stats.resourcesByType.length > 0 ? (
               stats.resourcesByType.map(({ type, count }) => (
                 <div key={type} className="flex items-center justify-between">
                   <span className="text-gray-700 font-medium">{getResourceTypeLabel(type)}</span>

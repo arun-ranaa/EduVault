@@ -18,7 +18,7 @@ const presignRules = [
     body('title').notEmpty().withMessage('Title is required'),
     body('fileName').notEmpty().withMessage('File name is required'),
     body('fileSize').isInt({ min: 1 }).withMessage('File size must be a positive integer'),
-    body('resourceType').isIn(['NOTES', 'BOOK', 'QUESTION_PAPER', 'ASSIGNMENT', 'STUDY_MATERIAL', 'QUESTION_BANK', 'LAB_RESOURCE', 'OTHER']).withMessage('Invalid resource type'),
+    body('categoryId').isInt({ min: 1 }).withMessage('Category is required'),
     body('tags').isArray({ min: 1 }).withMessage('Tags must be an array with at least one item')
 ];
 

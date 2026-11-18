@@ -7,6 +7,7 @@ const {
     findMatchingCategoryId,
     getCategoriesWithCounts,
     buildCategoryFilterCondition,
+    getResourceTypeForCategoryName,
 } = require('../utils/categoryHelper');
 
 const getCategories = async (req, res, next) => {
@@ -132,21 +133,34 @@ const getResourceById = async (req, res, next) => {
 
 const createResourcePresign = async (req, res, next) => {
     try {
-        const { title, description, resourceType, subject, categoryId, semester, tags, fileName, fileSize, fileType } = req.body;
+        const { title, description, resourceType, categoryId, semester, tags, fileName, fileSize, fileType } = req.body;
 
         const parsedSize = parseInt(fileSize, 10);
+        const parsedCategoryId = parseInt(categoryId, 10);
+
+        if (isNaN(parsedCategoryId)) {
+            throw new AppError('Category is required', 400);
+        }
 
         if (!s3Service.isAllowedFileType(fileName)) {
             throw new AppError('File type not allowed. Allowed types: ' + config.allowedFileTypes.join(', '), 400);
         }
 
-        const [user, usage] = await Promise.all([
+        const [category, user, usage] = await Promise.all([
+            prisma.category.findUnique({
+                where: { id: parsedCategoryId },
+                select: { id: true, name: true },
+            }),
             prisma.user.findUnique({
                 where: { id: req.user.id },
                 select: { storageQuota: true },
             }),
             getUserStorageUsage(req.user.id),
         ]);
+
+        if (!category) {
+            throw new AppError('Selected category not found', 400);
+        }
 
         const userStorageQuota = Number(user?.storageQuota || config.upload.maxVaultStorage);
         if (usage.totalBytes + parsedSize > userStorageQuota) {
@@ -155,7 +169,8 @@ const createResourcePresign = async (req, res, next) => {
             throw new AppError(`Storage quota exceeded. You have ${remainingMB} MB remaining.`, 413);
         }
 
-        const s3Key = s3Service.generateResourceKey(resourceType, fileName);
+        const derivedResourceType = getResourceTypeForCategoryName(category.name) || resourceType || 'OTHER';
+        const s3Key = s3Service.generateResourceKey(derivedResourceType, fileName);
         const contentType = s3Service.getContentType(fileName) || fileType || 'application/octet-stream';
         const uploadUrl = await s3Service.generateUploadPresignedUrl(s3Key, contentType);
 
@@ -165,7 +180,7 @@ const createResourcePresign = async (req, res, next) => {
                 uploadUrl,
                 s3Key,
                 contentType,
-                fields: { title, description, resourceType, subject, categoryId, semester, tags, fileName, fileType: contentType, fileSize: parsedSize }
+                fields: { title, description, resourceType: derivedResourceType, categoryId: category.id, semester, tags, fileName, fileType: contentType, fileSize: parsedSize }
             }
         });
     } catch (error) {
@@ -175,28 +190,43 @@ const createResourcePresign = async (req, res, next) => {
 
 const completeResourceUpload = async (req, res, next) => {
     try {
-        const { title, description, resourceType, subject, categoryId, semester, tags, fileName, fileType, fileSize, s3Key } = req.body;
+        const { title, description, resourceType, categoryId, semester, tags, fileName, fileType, fileSize, s3Key } = req.body;
         const userId = req.user.id;
         const parsedFileSize = parseInt(fileSize, 10);
 
         const resource = await prisma.$transaction(async (tx) => {
             let resolvedCategoryId = null;
+            let resolvedCategoryName = null;
+
             if (categoryId !== undefined && categoryId !== null && categoryId !== '') {
                 const parsedCatId = parseInt(categoryId, 10);
                 if (!isNaN(parsedCatId)) {
-                    resolvedCategoryId = parsedCatId;
+                    const cat = await tx.category.findUnique({
+                        where: { id: parsedCatId },
+                        select: { id: true, name: true },
+                    });
+                    if (cat) {
+                        resolvedCategoryId = cat.id;
+                        resolvedCategoryName = cat.name;
+                    }
                 }
             }
             if (!resolvedCategoryId && resourceType) {
                 resolvedCategoryId = await findMatchingCategoryId(tx, resourceType);
             }
 
+            if (!resolvedCategoryId) {
+                throw new AppError('A valid category is required', 400);
+            }
+
+            const derivedResourceType = getResourceTypeForCategoryName(resolvedCategoryName) || resourceType || 'OTHER';
+
             const newResource = await tx.resource.create({
                 data: {
                     title,
                     description: description || null,
-                    resourceType,
-                    subject: subject || null,
+                    resourceType: derivedResourceType,
+                    subject: null,
                     categoryId: resolvedCategoryId,
                     semester: semester || null,
                     fileName,

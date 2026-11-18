@@ -7,18 +7,6 @@ import Pagination from '../../components/common/Pagination';
 import SearchBar from '../../components/common/SearchBar';
 import toast from 'react-hot-toast';
 
-const ResourceTypes = [
-  { value: '', label: 'All Types' },
-  { value: 'NOTES', label: 'Notes' },
-  { value: 'BOOK', label: 'Book' },
-  { value: 'QUESTION_PAPER', label: 'Question Paper' },
-  { value: 'ASSIGNMENT', label: 'Assignment' },
-  { value: 'STUDY_MATERIAL', label: 'Study Material' },
-  { value: 'QUESTION_BANK', label: 'Question Bank' },
-  { value: 'LAB_RESOURCE', label: 'Lab Resource' },
-  { value: 'OTHER', label: 'Other' }
-];
-
 const ResourcesPage = () => {
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -29,8 +17,6 @@ const ResourcesPage = () => {
   // Filters
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
-  const [resourceType, setResourceType] = useState('');
-  const [subject, setSubject] = useState('');
   const [tag, setTag] = useState('');
   const [page, setPage] = useState(1);
   const limit = 12;
@@ -42,7 +28,7 @@ const ResourcesPage = () => {
   useEffect(() => {
     fetchResources();
     fetchBookmarks();
-  }, [search, category, resourceType, subject, tag, page]);
+  }, [search, category, tag, page]);
 
   const fetchCategories = async () => {
     try {
@@ -56,7 +42,7 @@ const ResourcesPage = () => {
   const fetchResources = async () => {
     setLoading(true);
     try {
-      const params = { search, category, resourceType, subject, tag, page, limit };
+      const params = { search, category, tag, page, limit };
       const response = await resourceAPI.getAll(params);
       setResources(response.data?.data || []);
       setPagination({
@@ -116,8 +102,6 @@ const ResourcesPage = () => {
   const clearFilters = () => {
     setSearch('');
     setCategory('');
-    setResourceType('');
-    setSubject('');
     setTag('');
     setPage(1);
   };
@@ -137,7 +121,7 @@ const ResourcesPage = () => {
           }
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
           <select 
             value={category} 
             onChange={(e) => { setCategory(e.target.value); setPage(1); }}
@@ -148,24 +132,6 @@ const ResourcesPage = () => {
               <option key={cat.id} value={cat.id}>{cat.name}</option>
             ))}
           </select>
-
-          <select 
-            value={resourceType} 
-            onChange={(e) => { setResourceType(e.target.value); setPage(1); }}
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 px-3 py-2 border"
-          >
-            {ResourceTypes.map(type => (
-              <option key={type.value} value={type.value}>{type.label}</option>
-            ))}
-          </select>
-
-          <input 
-            type="text" 
-            placeholder="Subject" 
-            value={subject}
-            onChange={(e) => { setSubject(e.target.value); setPage(1); }}
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 px-3 py-2 border"
-          />
 
           <input 
             type="text" 

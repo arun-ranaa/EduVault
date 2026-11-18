@@ -11,8 +11,11 @@ const ResourceCard = ({ resource, onBookmarkToggle, isBookmarked }) => {
     e.preventDefault();
     e.stopPropagation();
     try {
-      const { downloadUrl } = await resourceAPI.getDownloadUrl(resource._id || resource.id);
-      window.open(downloadUrl, '_blank');
+      const res = await resourceAPI.getDownloadUrl(resource._id || resource.id);
+      const downloadUrl = res.data?.data?.downloadUrl || res.data?.downloadUrl;
+      if (downloadUrl) {
+        window.open(downloadUrl, '_blank');
+      }
     } catch (error) {
       console.error('Download error:', error);
       toast.error('Failed to get download URL');
@@ -37,8 +40,9 @@ const ResourceCard = ({ resource, onBookmarkToggle, isBookmarked }) => {
     return t.tag?.name || t.name || '';
   };
   
+  const categoryName = resource.category?.name || (typeof resource.category === 'string' ? resource.category : null);
   const typeColor = getResourceTypeColor ? getResourceTypeColor(resource.resourceType) : 'bg-blue-100 text-blue-800';
-  const typeLabel = getResourceTypeLabel ? getResourceTypeLabel(resource.resourceType) : resource.resourceType;
+  const typeLabel = categoryName || (getResourceTypeLabel ? getResourceTypeLabel(resource.resourceType) : 'Uncategorized');
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200 flex flex-col h-full">
@@ -59,10 +63,11 @@ const ResourceCard = ({ resource, onBookmarkToggle, isBookmarked }) => {
           </h3>
         </Link>
 
-        <div className="mt-2 text-sm text-gray-500 space-y-1">
-          {resource.subject && <p>Subject: <span className="font-medium text-gray-700">{resource.subject}</span></p>}
-          {resource.category && <p>Category: <span className="font-medium text-gray-700">{resource.category.name || resource.category}</span></p>}
-        </div>
+        {resource.semester && (
+          <div className="mt-2 text-sm text-gray-500">
+            <p>Semester: <span className="font-medium text-gray-700">{resource.semester}</span></p>
+          </div>
+        )}
 
         {tags.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">

@@ -107,8 +107,8 @@ const ResourceDetailPage = () => {
   const isUploader = user && resource.uploadedBy && (user.id === resource.uploadedBy.id);
   const canDelete = isAdmin || isUploader;
   
+  const categoryName = resource.category?.name || (getResourceTypeLabel ? getResourceTypeLabel(resource.resourceType) : 'Uncategorized');
   const typeColor = getResourceTypeColor ? getResourceTypeColor(resource.resourceType) : 'bg-blue-100 text-blue-800';
-  const typeLabel = getResourceTypeLabel ? getResourceTypeLabel(resource.resourceType) : resource.resourceType;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
@@ -123,7 +123,7 @@ const ResourceDetailPage = () => {
             <div className="flex-1">
               <div className="flex flex-wrap items-center gap-3 mb-3">
                 <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${typeColor}`}>
-                  {typeLabel}
+                  {categoryName}
                 </span>
                 <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 uppercase">
                   {resource.fileType || 'FILE'}
@@ -180,12 +180,8 @@ const ResourceDetailPage = () => {
               <h3 className="text-lg font-semibold text-gray-900">Resource Details</h3>
               <dl className="space-y-3 text-sm">
                 <div className="grid grid-cols-3 gap-4">
-                  <dt className="text-gray-500 font-medium">Subject</dt>
-                  <dd className="col-span-2 text-gray-900">{resource.subject || 'N/A'}</dd>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
                   <dt className="text-gray-500 font-medium">Category</dt>
-                  <dd className="col-span-2 text-gray-900">{resource.category?.name || 'N/A'}</dd>
+                  <dd className="col-span-2 text-gray-900">{categoryName}</dd>
                 </div>
                 {resource.semester && (
                   <div className="grid grid-cols-3 gap-4">
