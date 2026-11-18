@@ -66,6 +66,7 @@ const isAllowedFileType = (fileName) => {
 const getContentType = (fileName) => {
     const ext = getFileExtension(fileName);
     const mimeMap = {
+        // Documents, E-Books & Data
         'pdf': 'application/pdf',
         'doc': 'application/msword',
         'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -74,10 +75,59 @@ const getContentType = (fileName) => {
         'xls': 'application/vnd.ms-excel',
         'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'txt': 'text/plain',
+        'csv': 'text/csv',
+        'md': 'text/markdown',
+        'rtf': 'application/rtf',
+        'epub': 'application/epub+zip',
+        'odt': 'application/vnd.oasis.opendocument.text',
+        'ods': 'application/vnd.oasis.opendocument.spreadsheet',
+        'odp': 'application/vnd.oasis.opendocument.presentation',
+        'json': 'application/json',
+        'xml': 'application/xml',
+        'yaml': 'application/x-yaml',
+        'yml': 'application/x-yaml',
+        // Archives
+        'zip': 'application/zip',
+        'rar': 'application/vnd.rar',
+        '7z': 'application/x-7z-compressed',
+        'tar': 'application/x-tar',
+        'gz': 'application/gzip',
+        // Images
         'png': 'image/png',
         'jpg': 'image/jpeg',
         'jpeg': 'image/jpeg',
-        'gif': 'image/gif'
+        'gif': 'image/gif',
+        'webp': 'image/webp',
+        'bmp': 'image/bmp',
+        'heic': 'image/heic',
+        'heif': 'image/heif',
+        'tiff': 'image/tiff',
+        'tif': 'image/tiff',
+        'avif': 'image/avif',
+        // Audio
+        'mp3': 'audio/mpeg',
+        'wav': 'audio/wav',
+        'm4a': 'audio/mp4',
+        'aac': 'audio/aac',
+        'ogg': 'audio/ogg',
+        'flac': 'audio/flac',
+        'wma': 'audio/x-ms-wma',
+        'opus': 'audio/opus',
+        'aiff': 'audio/aiff',
+        'amr': 'audio/amr',
+        // Video
+        'mp4': 'video/mp4',
+        'mkv': 'video/x-matroska',
+        'mov': 'video/quicktime',
+        'avi': 'video/x-msvideo',
+        'webm': 'video/webm',
+        'wmv': 'video/x-ms-wmv',
+        'flv': 'video/x-flv',
+        'm4v': 'video/x-m4v',
+        '3gp': 'video/3gpp',
+        'mpeg': 'video/mpeg',
+        'mpg': 'video/mpeg',
+        'ogv': 'video/ogg'
     };
     return mimeMap[ext] || 'application/octet-stream';
 };

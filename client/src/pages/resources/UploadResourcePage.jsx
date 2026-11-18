@@ -17,7 +17,6 @@ const ResourceTypes = [
 ];
 
 const Semesters = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 const normalizeKey = (value = '') =>
   String(value)
@@ -112,12 +111,6 @@ const UploadResourcePage = () => {
 
   const handleFileSelect = (selectedFile) => {
     if (!selectedFile) return;
-    
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      toast.error('File size exceeds the 50MB limit');
-      return;
-    }
-    
     setFile(selectedFile);
   };
 
@@ -165,7 +158,7 @@ const UploadResourcePage = () => {
       };
       
       const presignRes = await resourceAPI.presign(presignData);
-      const { uploadUrl, s3Key } = presignRes.data?.data || presignRes.data || {};
+      const { uploadUrl, s3Key, contentType } = presignRes.data?.data || presignRes.data || {};
       
       if (!uploadUrl || !s3Key) {
         throw new Error('Failed to get upload credentials');
@@ -177,14 +170,14 @@ const UploadResourcePage = () => {
           ? progress
           : Math.round((progress.loaded * 100) / progress.total);
         setUploadProgress(percent);
-      });
+      }, contentType);
 
       // 3. Complete resource creation in backend
       const completeData = {
         ...formData,
         tags,
         fileName: file.name,
-        fileType: fileType,
+        fileType: contentType || fileType,
         fileSize: file.size,
         s3Key
       };
@@ -385,7 +378,7 @@ const UploadResourcePage = () => {
                       </span>
                       <p className="pl-1">or drag and drop</p>
                     </div>
-                    <p className="text-xs text-gray-500">PDF, PPT, DOC, DOCX, ZIP up to 50MB</p>
+                    <p className="text-xs text-gray-500">Documents, Archives, Images, Audio &amp; Video — limited only by your storage quota</p>
                   </>
                 )}
               </div>

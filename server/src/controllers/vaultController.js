@@ -76,9 +76,6 @@ exports.createVaultPresign = async (req, res, next) => {
     }
 
     const parsedSize = parseInt(fileSize, 10);
-    if (parsedSize > config.upload.maxFileSize) {
-      throw new AppError(`File exceeds maximum size of ${(config.upload.maxFileSize / (1024 * 1024)).toFixed(0)}MB`, 400);
-    }
 
     const [user, usage] = await Promise.all([
       prisma.user.findUnique({
@@ -98,7 +95,7 @@ exports.createVaultPresign = async (req, res, next) => {
     }
 
     const s3Key = s3Service.generateVaultKey(req.user.id, fileName);
-    const contentType = s3Service.getContentType(fileName) || fileType;
+    const contentType = s3Service.getContentType(fileName) || fileType || 'application/octet-stream';
     const uploadUrl = await s3Service.generateUploadPresignedUrl(s3Key, contentType);
 
     res.status(200).json({
@@ -106,6 +103,7 @@ exports.createVaultPresign = async (req, res, next) => {
       data: {
         uploadUrl,
         s3Key,
+        contentType,
         fileName,
         fileSize: parsedSize,
       },

@@ -5,6 +5,9 @@ import {
   FaFileExcel,
   FaFilePowerpoint,
   FaFileImage,
+  FaFileVideo,
+  FaFileAudio,
+  FaFileArchive,
   FaFileAlt,
   FaFile,
 } from 'react-icons/fa';
@@ -32,6 +35,12 @@ export default function FileTypeIcon({ fileType, size = 'md' }) {
       return <FaFilePowerpoint className={`${className} text-orange-500`} />;
     case 'image':
       return <FaFileImage className={`${className} text-purple-500`} />;
+    case 'video':
+      return <FaFileVideo className={`${className} text-pink-500`} />;
+    case 'audio':
+      return <FaFileAudio className={`${className} text-indigo-500`} />;
+    case 'archive':
+      return <FaFileArchive className={`${className} text-amber-600`} />;
     case 'txt':
       return <FaFileAlt className={`${className} text-gray-500`} />;
     default:

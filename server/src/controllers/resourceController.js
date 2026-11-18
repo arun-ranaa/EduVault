@@ -135,9 +135,6 @@ const createResourcePresign = async (req, res, next) => {
         const { title, description, resourceType, subject, categoryId, semester, tags, fileName, fileSize, fileType } = req.body;
 
         const parsedSize = parseInt(fileSize, 10);
-        if (parsedSize > config.upload.maxFileSize) {
-            throw new AppError(`File size exceeds the maximum limit of ${(config.upload.maxFileSize / (1024 * 1024)).toFixed(0)}MB`, 400);
-        }
 
         if (!s3Service.isAllowedFileType(fileName)) {
             throw new AppError('File type not allowed. Allowed types: ' + config.allowedFileTypes.join(', '), 400);
@@ -159,7 +156,7 @@ const createResourcePresign = async (req, res, next) => {
         }
 
         const s3Key = s3Service.generateResourceKey(resourceType, fileName);
-        const contentType = s3Service.getContentType(fileName) || fileType;
+        const contentType = s3Service.getContentType(fileName) || fileType || 'application/octet-stream';
         const uploadUrl = await s3Service.generateUploadPresignedUrl(s3Key, contentType);
 
         res.json({
@@ -167,6 +164,7 @@ const createResourcePresign = async (req, res, next) => {
             data: {
                 uploadUrl,
                 s3Key,
+                contentType,
                 fields: { title, description, resourceType, subject, categoryId, semester, tags, fileName, fileType: contentType, fileSize: parsedSize }
             }
         });

@@ -57,7 +57,7 @@ model Resource {
   resourceType  ResourceType
   semester      String?      @db.VarChar(20)
   fileName      String       @db.VarChar(255)
-  fileType      String       @db.VarChar(50)
+  fileType      String       @db.VarChar(150)
   fileSize      BigInt
   s3Key         String       @db.VarChar(500)
   downloadCount Int          @default(0)
@@ -136,7 +136,7 @@ model VaultFile {
   ownerId   Int
   name      String   @db.VarChar(255)
   fileName  String   @db.VarChar(255)
-  fileType  String   @db.VarChar(50)
+  fileType  String   @db.VarChar(150)
   fileSize  BigInt
   s3Key     String   @db.VarChar(500)
   folder    String   @default("/") @db.VarChar(255)

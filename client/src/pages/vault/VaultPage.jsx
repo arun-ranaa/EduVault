@@ -97,7 +97,7 @@ const VaultPage = () => {
         fileType: uploadFile.type || 'application/octet-stream',
         folder: uploadFolder
       });
-      const { uploadUrl, s3Key } = presignRes.data?.data || presignRes.data;
+      const { uploadUrl, s3Key, contentType } = presignRes.data?.data || presignRes.data;
 
       if (!uploadUrl) {
         throw new Error('Upload URL not provided');
@@ -106,12 +106,12 @@ const VaultPage = () => {
       // 2. Upload to S3
       await uploadToS3(uploadUrl, uploadFile, (progress) => {
         setUploadProgress(progress);
-      });
+      }, contentType);
 
       // 3. Complete
       await vaultAPI.complete({
         fileName: uploadFile.name,
-        fileType: uploadFile.type || 'application/octet-stream',
+        fileType: contentType || uploadFile.type || 'application/octet-stream',
         fileSize: uploadFile.size,
         s3Key,
         folder: uploadFolder,
@@ -315,7 +315,7 @@ const VaultPage = () => {
                   />
                   <HiOutlineCloudArrowUp className="mx-auto w-12 h-12 text-gray-400 mb-4" />
                   <p className="text-gray-700 font-medium mb-1">Click to select a file</p>
-                  <p className="text-gray-500 text-sm">PDF, DOC, PPT, XLS, TXT, Images — up to 50MB</p>
+                  <p className="text-gray-500 text-sm">Documents, Archives, Images, Audio &amp; Video — limited only by your storage quota</p>
                 </div>
               ) : (
                 <form onSubmit={handleUploadSubmit} className="space-y-4">

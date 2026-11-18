@@ -33,11 +33,14 @@ export const getFileIcon = (fileType) => {
   const type = fileType.toLowerCase();
 
   if (type.includes('pdf')) return 'pdf';
-  if (type.includes('word') || type.includes('doc')) return 'doc';
-  if (type.includes('excel') || type.includes('sheet') || type.includes('xls')) return 'xls';
-  if (type.includes('powerpoint') || type.includes('presentation') || type.includes('ppt')) return 'ppt';
-  if (type.includes('image') || type.match(/\.(jpg|jpeg|png|gif)$/i)) return 'image';
-  if (type.includes('text') || type.includes('txt')) return 'txt';
+  if (type.includes('word') || type.includes('doc') || type.includes('odt') || type.includes('rtf') || type.includes('epub')) return 'doc';
+  if (type.includes('excel') || type.includes('sheet') || type.includes('xls') || type.includes('csv') || type.includes('ods')) return 'xls';
+  if (type.includes('powerpoint') || type.includes('presentation') || type.includes('ppt') || type.includes('odp')) return 'ppt';
+  if (type.includes('image') || type.match(/\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|tiff|tif|avif)$/i)) return 'image';
+  if (type.includes('video') || type.match(/\.(mp4|mkv|mov|avi|webm|wmv|flv|m4v|3gp|mpeg|mpg|ogv)$/i)) return 'video';
+  if (type.includes('audio') || type.match(/\.(mp3|wav|m4a|aac|ogg|flac|wma|opus|aiff|amr)$/i)) return 'audio';
+  if (type.includes('zip') || type.includes('rar') || type.includes('7z') || type.includes('tar') || type.includes('gzip') || type.includes('compressed') || type.includes('archive')) return 'archive';
+  if (type.includes('text') || type.includes('txt') || type.includes('markdown') || type.includes('json') || type.includes('xml') || type.includes('yaml')) return 'txt';
 
   return 'default';
 };

@@ -104,10 +104,10 @@ export const adminAPI = {
 };
 
 // S3 Direct Upload
-export const uploadToS3 = async (presignedUrl, file, onProgress) => {
+export const uploadToS3 = async (presignedUrl, file, onProgress, contentType) => {
   return axios.put(presignedUrl, file, {
     headers: {
-      'Content-Type': file.type || 'application/octet-stream',
+      'Content-Type': contentType || file.type || 'application/octet-stream',
     },
     onUploadProgress: (progressEvent) => {
       if (onProgress && progressEvent.total) {
