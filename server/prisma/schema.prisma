@@ -15,9 +15,12 @@ model User {
   role          Role         @default(USER)
   storageQuota  BigInt       @default(5368709120) // 5GB in bytes
   storageUsed   BigInt       @default(0)
-  isActive      Boolean      @default(true)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  isActive             Boolean      @default(true)
+  isEmailVerified      Boolean      @default(false)
+  emailVerifyToken     String?      @unique @db.VarChar(255)
+  emailVerifyExpiry    DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   resources     Resource[]
   bookmarks     Bookmark[]

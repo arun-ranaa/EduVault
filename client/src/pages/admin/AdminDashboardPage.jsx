@@ -14,7 +14,7 @@ const AdminDashboardPage = () => {
     const fetchDashboard = async () => {
       try {
         const res = await adminAPI.getDashboard();
-        setStats(res.data);
+        setStats(res.data?.data ?? res.data ?? null);
       } catch (error) {
         toast.error('Failed to load admin dashboard');
         console.error(error);
@@ -82,7 +82,7 @@ const AdminDashboardPage = () => {
             {stats.resourcesByType && stats.resourcesByType.length > 0 ? (
               stats.resourcesByType.map(({ type, count }) => (
                 <div key={type} className="flex items-center justify-between">
-                  <span className="text-gray-700 font-medium capitalize">{type.toLowerCase()}</span>
+                  <span className="text-gray-700 font-medium">{getResourceTypeLabel(type)}</span>
                   <span className="bg-gray-100 text-gray-800 py-1 px-3 rounded-full text-sm font-bold">{count}</span>
                 </div>
               ))

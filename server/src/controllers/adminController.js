@@ -2,19 +2,27 @@ const prisma = require('../config/database');
 const s3Service = require('../services/s3Service');
 const { AppError } = require('../middleware/errorHandler');
 const { serializeBigInt, paginate, buildPaginationResponse } = require('../utils/helpers');
+const {
+  getUsersStorageUsageMap,
+  getUserStorageUsage,
+  getTotalPlatformStorageUsed,
+  syncUserStorageUsed,
+} = require('../utils/storageHelper');
+const {
+  getCategoriesWithCounts,
+  buildCategoryFilterCondition,
+} = require('../utils/categoryHelper');
 
 exports.getDashboardStats = async (req, res, next) => {
   try {
-    const [totalUsers, totalResources, totalVaultFiles] = await Promise.all([
+    const [totalUsers, totalResources, totalVaultFiles, storageTotals] = await Promise.all([
       prisma.user.count(),
       prisma.resource.count(),
       prisma.vaultFile.count(),
+      getTotalPlatformStorageUsed(),
     ]);
 
-    const users = await prisma.user.findMany({
-      select: { storageUsed: true },
-    });
-    const totalStorageUsed = users.reduce((acc, user) => acc + Number(user.storageUsed || 0), 0);
+    const totalStorageUsed = storageTotals.totalBytes;
 
     const resourcesGrouped = await prisma.resource.groupBy({
       by: ['resourceType'],
@@ -38,6 +46,8 @@ exports.getDashboardStats = async (req, res, next) => {
         totalResources,
         totalVaultFiles,
         totalStorageUsed,
+        resourceStorageUsed: storageTotals.resourceBytes,
+        vaultStorageUsed: storageTotals.vaultBytes,
         resourcesByType,
         recentActivityCount,
       },
@@ -83,9 +93,20 @@ exports.getUsers = async (req, res, next) => {
       }),
     ]);
 
+    const usageMap = await getUsersStorageUsageMap(users.map((u) => u.id));
+    const enrichedUsers = users.map((user) => {
+      const usage = usageMap.get(user.id) || { resourceBytes: 0, vaultBytes: 0, totalBytes: 0 };
+      return {
+        ...serializeBigInt(user),
+        storageUsed: usage.totalBytes,
+        resourceStorageUsed: usage.resourceBytes,
+        vaultStorageUsed: usage.vaultBytes,
+      };
+    });
+
     res.status(200).json({
       success: true,
-      data: serializeBigInt(users),
+      data: enrichedUsers,
       pagination: buildPaginationResponse(total, page, limit),
     });
   } catch (error) {
@@ -98,32 +119,40 @@ exports.getUserById = async (req, res, next) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('Invalid user ID', 400);
 
-    const user = await prisma.user.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        isActive: true,
-        storageQuota: true,
-        storageUsed: true,
-        createdAt: true,
-        _count: {
-          select: {
-            resources: true,
-            vaultFiles: true,
-            bookmarks: true,
+    const [user, usage] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+          storageQuota: true,
+          storageUsed: true,
+          createdAt: true,
+          _count: {
+            select: {
+              resources: true,
+              vaultFiles: true,
+              bookmarks: true,
+            },
           },
         },
-      },
-    });
+      }),
+      getUserStorageUsage(id),
+    ]);
 
     if (!user) throw new AppError('User not found', 404);
 
     res.status(200).json({
       success: true,
-      data: serializeBigInt(user),
+      data: {
+        ...serializeBigInt(user),
+        storageUsed: usage.totalBytes,
+        resourceStorageUsed: usage.resourceBytes,
+        vaultStorageUsed: usage.vaultBytes,
+      },
     });
   } catch (error) {
     next(error);
@@ -163,20 +192,27 @@ exports.updateUserQuota = async (req, res, next) => {
     if (isNaN(id)) throw new AppError('Invalid user ID', 400);
 
     const { storageQuota } = req.body;
+    const numericQuota = Number(storageQuota);
 
-    if (storageQuota === undefined || isNaN(Number(storageQuota))) {
+    if (storageQuota === undefined || isNaN(numericQuota) || numericQuota <= 0) {
       throw new AppError('Invalid storage quota', 400);
     }
 
-    const updatedUser = await prisma.user.update({
-      where: { id },
-      data: { storageQuota: BigInt(storageQuota) },
-      select: { id: true, name: true, email: true, storageQuota: true, storageUsed: true },
-    });
+    const [updatedUser, usage] = await Promise.all([
+      prisma.user.update({
+        where: { id },
+        data: { storageQuota: BigInt(Math.round(numericQuota)) },
+        select: { id: true, name: true, email: true, storageQuota: true, storageUsed: true },
+      }),
+      getUserStorageUsage(id),
+    ]);
 
     res.status(200).json({
       success: true,
-      data: serializeBigInt(updatedUser),
+      data: {
+        ...serializeBigInt(updatedUser),
+        storageUsed: usage.totalBytes,
+      },
     });
   } catch (error) {
     next(error);
@@ -185,21 +221,32 @@ exports.updateUserQuota = async (req, res, next) => {
 
 exports.getAdminResources = async (req, res, next) => {
   try {
-    const { page, limit, search, category, resourceType } = req.query;
+    const { page, limit, search, category, resourceType, type } = req.query;
     const { skip, take } = paginate(page, limit);
 
     const where = {};
+    const andConditions = [];
     if (search) {
-      where.OR = [
-        { title: { contains: search } },
-        { description: { contains: search } },
-      ];
+      andConditions.push({
+        OR: [
+          { title: { contains: search } },
+          { description: { contains: search } },
+        ],
+      });
     }
     if (category) {
-      where.categoryId = parseInt(category);
+      const categoryCondition = await buildCategoryFilterCondition(prisma, category);
+      if (categoryCondition) {
+        andConditions.push(categoryCondition);
+      }
     }
-    if (resourceType) {
-      where.resourceType = resourceType;
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
+
+    const effectiveResourceType = resourceType || type;
+    if (effectiveResourceType) {
+      where.resourceType = effectiveResourceType;
     }
 
     const [total, resources] = await Promise.all([
@@ -243,6 +290,7 @@ exports.deleteAdminResource = async (req, res, next) => {
       await tx.resourceTag.deleteMany({ where: { resourceId: id } });
       await tx.bookmark.deleteMany({ where: { resourceId: id } });
       await tx.resource.delete({ where: { id } });
+      await syncUserStorageUsed(tx, resource.uploadedById);
       await tx.activity.create({
         data: {
           action: 'RESOURCE_DELETED',
@@ -261,12 +309,7 @@ exports.deleteAdminResource = async (req, res, next) => {
 
 exports.getCategories = async (req, res, next) => {
   try {
-    const categories = await prisma.category.findMany({
-      include: {
-        _count: { select: { resources: true } },
-      },
-      orderBy: { name: 'asc' },
-    });
+    const categories = await getCategoriesWithCounts(prisma);
 
     res.status(200).json({
       success: true,
@@ -404,26 +447,32 @@ exports.getActivities = async (req, res, next) => {
 
 exports.getStorageStats = async (req, res, next) => {
   try {
-    const users = await prisma.user.findMany({
-      select: { id: true, name: true, email: true, storageUsed: true, storageQuota: true },
-      orderBy: { storageUsed: 'desc' },
-      take: 100,
-    });
+    const [users, usageMap] = await Promise.all([
+      prisma.user.findMany({
+        select: { id: true, name: true, email: true, storageUsed: true, storageQuota: true },
+      }),
+      getUsersStorageUsageMap(),
+    ]);
 
     let totalUsed = 0;
     let totalQuota = 0;
 
-    const userBreakdown = users.map(user => {
-      const used = Number(user.storageUsed || 0);
-      const quota = Number(user.storageQuota || 0);
-      totalUsed += used;
-      totalQuota += quota;
-      return {
-        ...user,
-        storageUsed: used,
-        storageQuota: quota,
-      };
-    });
+    const userBreakdown = users
+      .map(user => {
+        const usage = usageMap.get(user.id) || { resourceBytes: 0, vaultBytes: 0, totalBytes: 0 };
+        const used = usage.totalBytes;
+        const quota = Number(user.storageQuota || 0);
+        totalUsed += used;
+        totalQuota += quota;
+        return {
+          ...user,
+          storageUsed: used,
+          resourceStorageUsed: usage.resourceBytes,
+          vaultStorageUsed: usage.vaultBytes,
+          storageQuota: quota,
+        };
+      })
+      .sort((a, b) => b.storageUsed - a.storageUsed);
 
     res.status(200).json({
       success: true,

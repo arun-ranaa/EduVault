@@ -57,13 +57,18 @@ const AdminStoragePage = () => {
           
           <div className="mb-6">
             <div className="flex justify-between text-sm mb-2 opacity-90">
-              <span>{globalPercentage.toFixed(1)}% of total allocated</span>
+              <span>
+                {totalUsed > 0 && globalPercentage < 0.1
+                  ? '<0.1%'
+                  : `${globalPercentage.toFixed(1)}%`}{' '}
+                of total allocated
+              </span>
               <span>{formatFileSize(totalAllocated)}</span>
             </div>
             <div className="w-full bg-primary-900/50 rounded-full h-3">
               <div 
                 className="bg-white h-3 rounded-full" 
-                style={{ width: `${Math.min(globalPercentage, 100)}%` }}
+                style={{ width: `${totalUsed > 0 ? Math.max(Math.min(globalPercentage, 100), 1) : 0}%` }}
               ></div>
             </div>
           </div>
@@ -90,6 +95,7 @@ const AdminStoragePage = () => {
                   {userStorage.map(user => {
                     const percent = calculateStoragePercentage(user.storageUsed, user.storageQuota);
                     const isHigh = percent > 85;
+                    const percentLabel = user.storageUsed > 0 && percent < 1 ? '<1%' : `${percent.toFixed(0)}%`;
                     return (
                       <tr key={user.id} className="border-b border-gray-50 hover:bg-gray-50">
                         <td className="py-3 px-2">
@@ -99,16 +105,21 @@ const AdminStoragePage = () => {
                         <td className="py-3 px-2">
                           <p className="text-sm font-medium">{formatFileSize(user.storageUsed)}</p>
                           <p className="text-xs text-gray-500">{formatFileSize(user.storageQuota)} limit</p>
+                          {user.storageUsed > 0 && (user.resourceStorageUsed !== undefined || user.vaultStorageUsed !== undefined) && (
+                            <p className="text-[11px] text-gray-400 mt-0.5">
+                              Resources: {formatFileSize(user.resourceStorageUsed || 0)} • Vault: {formatFileSize(user.vaultStorageUsed || 0)}
+                            </p>
+                          )}
                         </td>
                         <td className="py-3 px-2 w-1/3 min-w-[120px]">
                           <div className="flex items-center gap-2">
                             <div className="flex-1 bg-gray-200 rounded-full h-2">
                               <div 
                                 className={`h-2 rounded-full ${isHigh ? 'bg-red-500' : 'bg-primary-500'}`} 
-                                style={{ width: `${Math.min(percent, 100)}%` }}
+                                style={{ width: `${user.storageUsed > 0 ? Math.max(Math.min(percent, 100), 2) : 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-xs font-medium w-8 text-right">{percent.toFixed(0)}%</span>
+                            <span className="text-xs font-medium w-10 text-right">{percentLabel}</span>
                           </div>
                         </td>
                       </tr>

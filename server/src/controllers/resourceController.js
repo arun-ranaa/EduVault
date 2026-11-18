@@ -2,6 +2,24 @@ const prisma = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const s3Service = require('../services/s3Service');
 const config = require('../config/index');
+const { getUserStorageUsage, syncUserStorageUsed } = require('../utils/storageHelper');
+const {
+    findMatchingCategoryId,
+    getCategoriesWithCounts,
+    buildCategoryFilterCondition,
+} = require('../utils/categoryHelper');
+
+const getCategories = async (req, res, next) => {
+    try {
+        const categories = await getCategoriesWithCounts(prisma);
+        res.json({
+            success: true,
+            data: categories
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
 const getResources = async (req, res, next) => {
     try {
@@ -10,16 +28,27 @@ const getResources = async (req, res, next) => {
         const { search, category, resourceType, subject, tag, sortBy = 'createdAt', order = 'desc' } = req.query;
 
         const where = {};
+        const andConditions = [];
         
         // MySQL is case-insensitive by default for contains
         if (search) {
-            where.OR = [
-                { title: { contains: search } },
-                { description: { contains: search } }
-            ];
+            andConditions.push({
+                OR: [
+                    { title: { contains: search } },
+                    { description: { contains: search } }
+                ]
+            });
         }
         
-        if (category) where.categoryId = parseInt(category);
+        if (category) {
+            const categoryCondition = await buildCategoryFilterCondition(prisma, category);
+            if (categoryCondition) {
+                andConditions.push(categoryCondition);
+            }
+        }
+        if (andConditions.length > 0) {
+            where.AND = andConditions;
+        }
         if (resourceType) where.resourceType = resourceType;
         if (subject) where.subject = { contains: subject };
         
@@ -105,12 +134,28 @@ const createResourcePresign = async (req, res, next) => {
     try {
         const { title, description, resourceType, subject, categoryId, semester, tags, fileName, fileSize, fileType } = req.body;
 
-        if (parseInt(fileSize) > config.upload.maxFileSize) {
+        const parsedSize = parseInt(fileSize, 10);
+        if (parsedSize > config.upload.maxFileSize) {
             throw new AppError(`File size exceeds the maximum limit of ${(config.upload.maxFileSize / (1024 * 1024)).toFixed(0)}MB`, 400);
         }
 
         if (!s3Service.isAllowedFileType(fileName)) {
             throw new AppError('File type not allowed. Allowed types: ' + config.allowedFileTypes.join(', '), 400);
+        }
+
+        const [user, usage] = await Promise.all([
+            prisma.user.findUnique({
+                where: { id: req.user.id },
+                select: { storageQuota: true },
+            }),
+            getUserStorageUsage(req.user.id),
+        ]);
+
+        const userStorageQuota = Number(user?.storageQuota || config.upload.maxVaultStorage);
+        if (usage.totalBytes + parsedSize > userStorageQuota) {
+            const remaining = Math.max(0, userStorageQuota - usage.totalBytes);
+            const remainingMB = (remaining / (1024 * 1024)).toFixed(1);
+            throw new AppError(`Storage quota exceeded. You have ${remainingMB} MB remaining.`, 413);
         }
 
         const s3Key = s3Service.generateResourceKey(resourceType, fileName);
@@ -122,7 +167,7 @@ const createResourcePresign = async (req, res, next) => {
             data: {
                 uploadUrl,
                 s3Key,
-                fields: { title, description, resourceType, subject, categoryId, semester, tags, fileName, fileType: contentType, fileSize }
+                fields: { title, description, resourceType, subject, categoryId, semester, tags, fileName, fileType: contentType, fileSize: parsedSize }
             }
         });
     } catch (error) {
@@ -134,19 +179,31 @@ const completeResourceUpload = async (req, res, next) => {
     try {
         const { title, description, resourceType, subject, categoryId, semester, tags, fileName, fileType, fileSize, s3Key } = req.body;
         const userId = req.user.id;
+        const parsedFileSize = parseInt(fileSize, 10);
 
         const resource = await prisma.$transaction(async (tx) => {
+            let resolvedCategoryId = null;
+            if (categoryId !== undefined && categoryId !== null && categoryId !== '') {
+                const parsedCatId = parseInt(categoryId, 10);
+                if (!isNaN(parsedCatId)) {
+                    resolvedCategoryId = parsedCatId;
+                }
+            }
+            if (!resolvedCategoryId && resourceType) {
+                resolvedCategoryId = await findMatchingCategoryId(tx, resourceType);
+            }
+
             const newResource = await tx.resource.create({
                 data: {
                     title,
                     description: description || null,
                     resourceType,
                     subject: subject || null,
-                    categoryId: categoryId ? parseInt(categoryId) : null,
+                    categoryId: resolvedCategoryId,
                     semester: semester || null,
                     fileName,
                     fileType,
-                    fileSize: parseInt(fileSize),
+                    fileSize: parsedFileSize,
                     s3Key,
                     uploadedById: userId,
                 }
@@ -171,6 +228,8 @@ const completeResourceUpload = async (req, res, next) => {
                     });
                 }
             }
+
+            await syncUserStorageUsed(tx, userId);
 
             await tx.activity.create({
                 data: {
@@ -229,6 +288,8 @@ const deleteResource = async (req, res, next) => {
             await tx.resourceTag.deleteMany({ where: { resourceId: id } });
             await tx.bookmark.deleteMany({ where: { resourceId: id } });
             await tx.resource.delete({ where: { id } });
+
+            await syncUserStorageUsed(tx, resource.uploadedById);
             
             await tx.activity.create({
                 data: {
@@ -289,6 +350,7 @@ const getMyResources = async (req, res, next) => {
 };
 
 module.exports = {
+    getCategories,
     getResources,
     getResourceById,
     createResourcePresign,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HiOutlineDocumentPlus, HiXMark, HiOutlineCloudArrowUp } from 'react-icons/hi2';
-import { resourceAPI, adminAPI, uploadToS3 } from '../../services/api';
+import { resourceAPI, uploadToS3 } from '../../services/api';
 import { formatFileSize } from '../../utils/helpers';
 import toast from 'react-hot-toast';
 
@@ -19,6 +19,20 @@ const ResourceTypes = [
 const Semesters = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
+const normalizeKey = (value = '') =>
+  String(value)
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/s$/, '');
+
+const findMatchingCategory = (categoriesList, resourceType) => {
+  if (!resourceType || !Array.isArray(categoriesList)) return null;
+  const targetKey = normalizeKey(resourceType);
+  return categoriesList.find((cat) => normalizeKey(cat.name) === targetKey) || null;
+};
+
 const UploadResourcePage = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -33,6 +47,7 @@ const UploadResourcePage = () => {
   });
   
   const [categories, setCategories] = useState([]);
+  const [categoryManuallySelected, setCategoryManuallySelected] = useState(false);
   const [tags, setTags] = useState([]);
   const [tagInput, setTagInput] = useState('');
   const [file, setFile] = useState(null);
@@ -47,9 +62,13 @@ const UploadResourcePage = () => {
 
   const fetchCategories = async () => {
     try {
-      if (adminAPI?.getCategories) {
-        const response = await adminAPI.getCategories();
-        setCategories(response.data?.data || []);
+      const response = await resourceAPI.getCategories();
+      const loadedCategories = response.data?.data || [];
+      setCategories(loadedCategories);
+
+      const matched = findMatchingCategory(loadedCategories, 'NOTES');
+      if (matched) {
+        setFormData(prev => (prev.categoryId ? prev : { ...prev, categoryId: String(matched.id) }));
       }
     } catch (error) {
       console.error('Failed to fetch categories', error);
@@ -58,6 +77,24 @@ const UploadResourcePage = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (name === 'categoryId') {
+      setCategoryManuallySelected(true);
+      setFormData(prev => ({ ...prev, categoryId: value }));
+      return;
+    }
+
+    if (name === 'resourceType') {
+      setFormData(prev => {
+        const next = { ...prev, resourceType: value };
+        if (!categoryManuallySelected) {
+          const matched = findMatchingCategory(categories, value);
+          next.categoryId = matched ? String(matched.id) : '';
+        }
+        return next;
+      });
+      return;
+    }
+
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -123,6 +160,7 @@ const UploadResourcePage = () => {
         fileSize: file.size,
         fileType: fileType,
         resourceType: formData.resourceType,
+        categoryId: formData.categoryId || undefined,
         tags
       };
       
@@ -135,7 +173,10 @@ const UploadResourcePage = () => {
 
       // 2. Upload directly to S3
       await uploadToS3(uploadUrl, file, (progress) => {
-        setUploadProgress(Math.round((progress.loaded * 100) / progress.total));
+        const percent = typeof progress === 'number'
+          ? progress
+          : Math.round((progress.loaded * 100) / progress.total);
+        setUploadProgress(percent);
       });
 
       // 3. Complete resource creation in backend

@@ -41,11 +41,8 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(async (data) => {
     const response = await authAPI.register(data);
-    const { token, user: userData } = response.data;
-    localStorage.setItem('eduvault_token', token);
-    localStorage.setItem('eduvault_user', JSON.stringify(userData));
-    setUser(userData);
-    return userData;
+    // Server no longer returns a token — user must verify email first
+    return response.data;
   }, []);
 
   const logout = useCallback(() => {

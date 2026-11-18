@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { resourceAPI, bookmarkAPI, adminAPI } from '../../services/api';
+import { resourceAPI, bookmarkAPI } from '../../services/api';
 import ResourceCard from '../../components/resources/ResourceCard';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
@@ -46,10 +46,8 @@ const ResourcesPage = () => {
 
   const fetchCategories = async () => {
     try {
-      if (adminAPI?.getCategories) {
-        const response = await adminAPI.getCategories();
-        setCategories(response.data?.data || []);
-      }
+      const response = await resourceAPI.getCategories();
+      setCategories(response.data?.data || []);
     } catch (error) {
       console.error('Failed to fetch categories', error);
     }

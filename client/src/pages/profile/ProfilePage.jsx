@@ -12,8 +12,7 @@ const ProfilePage = () => {
   const [saving, setSaving] = useState(false);
   
   const [formData, setFormData] = useState({
-    name: '',
-    email: ''
+    name: ''
   });
 
   useEffect(() => {
@@ -23,8 +22,7 @@ const ProfilePage = () => {
         const profileData = res.data?.data || res.data;
         setProfile(profileData);
         setFormData({
-          name: profileData.name || '',
-          email: profileData.email || ''
+          name: profileData.name || ''
         });
       } catch (error) {
         toast.error('Failed to load profile');
@@ -108,16 +106,11 @@ const ProfilePage = () => {
             </div>
             
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-md border border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                required
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+              <div className="w-full px-4 py-2 rounded-md border border-gray-200 bg-gray-50 text-gray-500 select-all">
+                {profile.email}
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Email address cannot be changed.</p>
             </div>
             
             <div className="pt-2">

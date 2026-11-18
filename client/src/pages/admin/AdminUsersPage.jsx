@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { adminAPI } from '../../services/api';
-import { formatFileSize, formatDate } from '../../utils/helpers';
+import { formatFileSize, formatDate, calculateStoragePercentage } from '../../utils/helpers';
 import { LoadingSpinner, EmptyState, Pagination, SearchBar } from '../../components/common';
 import toast from 'react-hot-toast';
 import { HiOutlineUsers, HiOutlinePencil, HiOutlineNoSymbol, HiOutlineCheck } from 'react-icons/hi2';
@@ -60,7 +60,7 @@ const AdminUsersPage = () => {
   const handleUpdateQuota = async (e) => {
     e.preventDefault();
     try {
-      const quotaBytes = parseFloat(newQuotaGB) * 1024 * 1024 * 1024;
+      const quotaBytes = Math.round(parseFloat(newQuotaGB) * 1024 * 1024 * 1024);
       await adminAPI.updateUserQuota(selectedUser.id, { storageQuota: quotaBytes });
       toast.success('Quota updated successfully');
       setQuotaModalOpen(false);
@@ -111,7 +111,11 @@ const AdminUsersPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {users.map(user => (
+                {users.map(user => {
+                  const usedBytes = Number(user.storageUsed || 0);
+                  const quotaBytes = Number(user.storageQuota || 0);
+                  const percent = calculateStoragePercentage(usedBytes, quotaBytes);
+                  return (
                   <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-3 px-4">
                       <div>
@@ -124,10 +128,18 @@ const AdminUsersPage = () => {
                         {user.role}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-sm">
-                      <span className="font-medium">{formatFileSize(user.storageUsed || 0)}</span>
-                      <span className="text-gray-400 mx-1">/</span>
-                      <span className="text-gray-500">{formatFileSize(user.storageQuota)}</span>
+                    <td className="py-3 px-4 text-sm min-w-[160px]">
+                      <div>
+                        <span className="font-medium text-gray-900">{formatFileSize(usedBytes)}</span>
+                        <span className="text-gray-400 mx-1">/</span>
+                        <span className="text-gray-500">{formatFileSize(quotaBytes)}</span>
+                      </div>
+                      <div className="w-28 bg-gray-200 rounded-full h-1.5 mt-1">
+                        <div
+                          className={`h-1.5 rounded-full ${percent > 85 ? 'bg-red-500' : 'bg-primary-500'}`}
+                          style={{ width: `${usedBytes > 0 ? Math.max(Math.min(percent, 100), 2) : 0}%` }}
+                        ></div>
+                      </div>
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex px-2 py-1 rounded text-xs font-bold ${user.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -160,7 +172,8 @@ const AdminUsersPage = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
             

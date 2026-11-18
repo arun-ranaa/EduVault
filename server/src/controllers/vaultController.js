@@ -3,6 +3,7 @@ const s3Service = require('../services/s3Service');
 const config = require('../config/index');
 const { AppError } = require('../middleware/errorHandler');
 const { serializeBigInt, paginate, buildPaginationResponse } = require('../utils/helpers');
+const { getUserStorageUsage, syncUserStorageUsed } = require('../utils/storageHelper');
 
 exports.getVaultFiles = async (req, res, next) => {
   try {
@@ -74,18 +75,21 @@ exports.createVaultPresign = async (req, res, next) => {
       throw new AppError('File type not allowed. Allowed: ' + config.allowedFileTypes.join(', '), 400);
     }
 
-    const parsedSize = parseInt(fileSize);
+    const parsedSize = parseInt(fileSize, 10);
     if (parsedSize > config.upload.maxFileSize) {
       throw new AppError(`File exceeds maximum size of ${(config.upload.maxFileSize / (1024 * 1024)).toFixed(0)}MB`, 400);
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { storageUsed: true, storageQuota: true },
-    });
+    const [user, usage] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { storageQuota: true },
+      }),
+      getUserStorageUsage(req.user.id),
+    ]);
 
-    const userStorageUsed = Number(user.storageUsed || 0);
-    const userStorageQuota = Number(user.storageQuota || config.upload.maxVaultStorage);
+    const userStorageUsed = usage.totalBytes;
+    const userStorageQuota = Number(user?.storageQuota || config.upload.maxVaultStorage);
 
     if (userStorageUsed + parsedSize > userStorageQuota) {
       const remaining = Math.max(0, userStorageQuota - userStorageUsed);
@@ -121,19 +125,14 @@ exports.completeVaultUpload = async (req, res, next) => {
           name: name || fileName,
           fileName,
           fileType,
-          fileSize: parseInt(fileSize),
+          fileSize: parseInt(fileSize, 10),
           s3Key,
           folder: folder || '/',
           ownerId: req.user.id,
         },
       });
 
-      await tx.user.update({
-        where: { id: req.user.id },
-        data: {
-          storageUsed: { increment: parseInt(fileSize) },
-        },
-      });
+      await syncUserStorageUsed(tx, req.user.id);
 
       await tx.activity.create({
         data: {
@@ -210,15 +209,7 @@ exports.deleteVaultFile = async (req, res, next) => {
         where: { id: file.id },
       });
 
-      const user = await tx.user.findUnique({ where: { id: req.user.id }, select: { storageUsed: true } });
-      const newStorageUsed = Math.max(0, Number(user.storageUsed) - Number(file.fileSize));
-
-      await tx.user.update({
-        where: { id: req.user.id },
-        data: {
-          storageUsed: BigInt(newStorageUsed),
-        },
-      });
+      await syncUserStorageUsed(tx, req.user.id);
 
       await tx.activity.create({
         data: {

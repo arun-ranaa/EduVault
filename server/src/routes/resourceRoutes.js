@@ -25,6 +25,7 @@ const presignRules = [
 router.use(authenticate);
 
 router.get('/', resourceController.getResources);
+router.get('/categories', resourceController.getCategories);
 router.get('/my', resourceController.getMyResources);
 router.get('/:id', resourceController.getResourceById);
 router.get('/:id/download', downloadController.getResourceDownloadUrl);

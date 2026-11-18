@@ -42,6 +42,8 @@ export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
   getMe: () => api.get('/auth/me'),
+  verifyEmail: (token) => api.get(`/auth/verify-email?token=${token}`),
+  resendVerification: (email) => api.post('/auth/resend-verification', { email }),
 };
 
 // User API
@@ -55,6 +57,7 @@ export const userAPI = {
 // Resource API
 export const resourceAPI = {
   getAll: (params) => api.get('/resources', { params }),
+  getCategories: () => api.get('/resources/categories'),
   getById: (id) => api.get(`/resources/${id}`),
   getMine: (params) => api.get('/resources/my', { params }),
   presign: (data) => api.post('/resources/presign', data),

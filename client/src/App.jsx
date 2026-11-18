@@ -13,6 +13,8 @@ import GuestRoute from './routes/GuestRoute';
 // Auth Pages
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
+import VerifyEmailSentPage from './pages/auth/VerifyEmailSentPage';
+import VerifyEmailPage from './pages/auth/VerifyEmailPage';
 
 // User Pages
 import DashboardPage from './pages/dashboard/DashboardPage';
@@ -49,6 +51,8 @@ function App() {
       <Route element={<GuestRoute><AuthLayout /></GuestRoute>}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/verify-email-sent" element={<VerifyEmailSentPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
       </Route>
 
       {/* Protected User Routes */}

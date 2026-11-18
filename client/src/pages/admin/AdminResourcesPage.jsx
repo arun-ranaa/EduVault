@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { adminAPI } from '../../services/api';
-import { formatFileSize, formatDate, getResourceTypeLabel } from '../../utils/helpers';
+import { formatFileSize, formatDate, getResourceTypeLabel, RESOURCE_TYPES } from '../../utils/helpers';
 import { LoadingSpinner, EmptyState, Pagination, SearchBar, ConfirmModal } from '../../components/common';
 import toast from 'react-hot-toast';
 import { HiOutlineBookOpen, HiOutlineTrash, HiOutlineEye } from 'react-icons/hi2';
@@ -37,7 +37,7 @@ const AdminResourcesPage = () => {
         page, 
         search, 
         category: categoryFilter, 
-        type: typeFilter 
+        resourceType: typeFilter 
       });
       const payload = res.data?.data ?? res.data ?? [];
       const pagination = res.data?.pagination ?? res.pagination ?? { pages: 1 };
@@ -107,10 +107,9 @@ const AdminResourcesPage = () => {
               className="input-field py-2"
             >
               <option value="">All Types</option>
-              <option value="DOCUMENT">Document</option>
-              <option value="VIDEO">Video</option>
-              <option value="LINK">Link</option>
-              <option value="ARCHIVE">Archive</option>
+              {RESOURCE_TYPES.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -138,7 +137,7 @@ const AdminResourcesPage = () => {
                     </td>
                     <td className="py-3 px-4">
                       <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                        {getResourceTypeLabel(resource.type)}
+                        {getResourceTypeLabel(resource.resourceType || resource.type)}
                       </span>
                     </td>
                     <td className="py-3 px-4">

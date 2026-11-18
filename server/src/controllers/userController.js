@@ -1,23 +1,27 @@
 const bcrypt = require('bcryptjs');
 const prisma = require('../config/database.js');
 const { AppError } = require('../middleware/errorHandler');
+const { getUserStorageUsage } = require('../utils/storageHelper');
 
 const getProfile = async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-        storageQuota: true,
-        storageUsed: true
-      }
-    });
+    const [user, usage] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          storageQuota: true,
+          storageUsed: true
+        }
+      }),
+      getUserStorageUsage(req.user.id)
+    ]);
 
     if (!user) {
       return next(new AppError('User not found', 404));
@@ -28,7 +32,9 @@ const getProfile = async (req, res, next) => {
       data: {
         ...user,
         storageQuota: Number(user.storageQuota),
-        storageUsed: Number(user.storageUsed)
+        storageUsed: usage.totalBytes,
+        resourceStorageUsed: usage.resourceBytes,
+        vaultStorageUsed: usage.vaultBytes
       }
     });
   } catch (error) {
@@ -38,24 +44,12 @@ const getProfile = async (req, res, next) => {
 
 const updateProfile = async (req, res, next) => {
   try {
-    const { name, email } = req.body;
-    
-    // Check if email is being updated and if it's already in use
-    if (email && email !== req.user.email) {
-      const existingUser = await prisma.user.findUnique({
-        where: { email }
-      });
-
-      if (existingUser) {
-        return next(new AppError('Email is already in use by another account', 409));
-      }
-    }
+    const { name } = req.body;
 
     const updatedUser = await prisma.user.update({
       where: { id: req.user.id },
       data: {
-        ...(name && { name }),
-        ...(email && { email })
+        ...(name && { name })
       },
       select: {
         id: true,
@@ -117,19 +111,22 @@ const changePassword = async (req, res, next) => {
 
 const getStorageInfo = async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: {
-        storageQuota: true,
-        storageUsed: true
-      }
-    });
+    const [user, usage] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: {
+          storageQuota: true,
+          storageUsed: true
+        }
+      }),
+      getUserStorageUsage(req.user.id)
+    ]);
 
     if (!user) {
       return next(new AppError('User not found', 404));
     }
 
-    const used = Number(user.storageUsed);
+    const used = usage.totalBytes;
     const quota = Number(user.storageQuota);
     const percentage = quota > 0 ? (used / quota) * 100 : 0;
 
@@ -138,6 +135,8 @@ const getStorageInfo = async (req, res, next) => {
       data: {
         used,
         quota,
+        resourceUsed: usage.resourceBytes,
+        vaultUsed: usage.vaultBytes,
         percentage: parseFloat(percentage.toFixed(2))
       }
     });

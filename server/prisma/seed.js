@@ -35,13 +35,15 @@ async function main() {
     update: {
       passwordHash: adminPassword,
       role: 'ADMIN',
-      isActive: true
+      isActive: true,
+      isEmailVerified: true,
     },
     create: {
       name: 'Admin User',
       email: 'admin@eduvault.com',
       passwordHash: adminPassword,
       role: 'ADMIN',
+      isEmailVerified: true,
     },
   });
   console.log(`Created Admin user: ${admin.email} / Admin@123`);
@@ -51,25 +53,28 @@ async function main() {
     where: { email: 'user1@eduvault.com' },
     update: {
       passwordHash: userPassword,
-      isActive: true
+      isActive: true,
+      isEmailVerified: true,
     },
     create: {
       name: 'Test User 1',
       email: 'user1@eduvault.com',
       passwordHash: userPassword,
       role: 'USER',
+      isEmailVerified: true,
     },
   });
   console.log(`Created Normal user 1: ${user1.email} / User@123`);
 
   const user2 = await prisma.user.upsert({
     where: { email: 'user2@eduvault.com' },
-    update: { passwordHash: userPassword, isActive: true },
+    update: { passwordHash: userPassword, isActive: true, isEmailVerified: true },
     create: {
       name: 'Test User 2',
       email: 'user2@eduvault.com',
       passwordHash: userPassword,
       role: 'USER',
+      isEmailVerified: true,
     },
   });
   console.log(`Created Normal user 2: ${user2.email} / User@123`);
@@ -91,12 +96,13 @@ async function main() {
   for (const u of dummyUsers) {
     const student = await prisma.user.upsert({
       where: { email: u.email },
-      update: { passwordHash: userPassword, isActive: true },
+      update: { passwordHash: userPassword, isActive: true, isEmailVerified: true },
       create: {
         name: u.name,
         email: u.email,
         passwordHash: userPassword,
         role: 'USER',
+        isEmailVerified: true,
       },
     });
     console.log(`Created Student: ${student.name} (${student.email}) / User@123`);

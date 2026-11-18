@@ -47,8 +47,7 @@ const RegisterPage = () => {
     try {
       const { confirmPassword, ...registerData } = formData;
       await register(registerData);
-      toast.success('Account created successfully!');
-      navigate('/dashboard');
+      navigate('/verify-email-sent', { state: { email: formData.email } });
     } catch (err) {
       const errMsg = err.response?.data?.message || 'Failed to create account. Please try again.';
       setError(errMsg);
