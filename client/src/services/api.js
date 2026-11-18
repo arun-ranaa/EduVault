@@ -63,6 +63,7 @@ export const resourceAPI = {
   presign: (data) => api.post('/resources/presign', data),
   complete: (data) => api.post('/resources/complete', data),
   delete: (id) => api.delete(`/resources/${id}`),
+  getPreviewUrl: (id) => api.get(`/resources/${id}/preview`),
   getDownloadUrl: (id) => api.get(`/resources/${id}/download`),
 };
 
@@ -82,6 +83,7 @@ export const vaultAPI = {
   getFolders: () => api.get('/vault/folders'),
   presign: (data) => api.post('/vault/presign', data),
   complete: (data) => api.post('/vault/complete', data),
+  getPreviewUrl: (id) => api.get(`/vault/${id}/preview`),
   getDownloadUrl: (id) => api.get(`/vault/${id}/download`),
   delete: (id) => api.delete(`/vault/${id}`),
 };

@@ -5,3 +5,4 @@ export { default as Pagination } from './Pagination';
 export { default as SearchBar } from './SearchBar';
 export { default as StorageUsage } from './StorageUsage';
 export { default as FileTypeIcon } from './FileTypeIcon';
+export { default as FilePreview } from './FilePreview';

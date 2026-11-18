@@ -13,11 +13,29 @@ const generateUploadPresignedUrl = async (key, contentType, expiresIn = config.u
     return getSignedUrl(s3Client, command, { expiresIn });
 };
 
+const buildContentDisposition = (disposition, originalFileName) => {
+    const fallbackName = String(originalFileName || 'file')
+        .replace(/["\\\r\n]/g, '_')
+        .replace(/[^\x20-\x7E]/g, '_');
+    const encodedName = encodeURIComponent(String(originalFileName || 'file'));
+    return `${disposition}; filename="${fallbackName}"; filename*=UTF-8''${encodedName}`;
+};
+
 const generateDownloadPresignedUrl = async (key, expiresIn = config.upload.presignedUrlExpiry || 3600, originalFileName) => {
     const command = new GetObjectCommand({
         Bucket: config.aws.s3BucketName,
         Key: key,
-        ResponseContentDisposition: `attachment; filename="${originalFileName}"`
+        ResponseContentDisposition: buildContentDisposition('attachment', originalFileName),
+    });
+    return getSignedUrl(s3Client, command, { expiresIn });
+};
+
+const generatePreviewPresignedUrl = async (key, contentType, expiresIn = config.upload.presignedUrlExpiry || 3600, originalFileName) => {
+    const command = new GetObjectCommand({
+        Bucket: config.aws.s3BucketName,
+        Key: key,
+        ResponseContentDisposition: buildContentDisposition('inline', originalFileName),
+        ResponseContentType: contentType || 'application/octet-stream',
     });
     return getSignedUrl(s3Client, command, { expiresIn });
 };
@@ -135,6 +153,7 @@ const getContentType = (fileName) => {
 module.exports = {
     generateUploadPresignedUrl,
     generateDownloadPresignedUrl,
+    generatePreviewPresignedUrl,
     deleteS3Object,
     deleteMultipleS3Objects,
     generateResourceKey,

@@ -22,6 +22,7 @@ router.post(
 );
 
 router.post('/complete', vaultController.completeVaultUpload);
+router.get('/:id/preview', vaultController.getVaultPreviewUrl);
 router.get('/:id/download', vaultController.getVaultDownloadUrl);
 router.delete('/:id', vaultController.deleteVaultFile);
 

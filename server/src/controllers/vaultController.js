@@ -184,6 +184,43 @@ exports.getVaultDownloadUrl = async (req, res, next) => {
   }
 };
 
+exports.getVaultPreviewUrl = async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) throw new AppError('Invalid file ID', 400);
+
+    const file = await prisma.vaultFile.findFirst({
+      where: {
+        id,
+        ownerId: req.user.id,
+      },
+    });
+
+    if (!file) {
+      throw new AppError('Vault file not found or access denied', 404);
+    }
+
+    const contentType = s3Service.getContentType(file.fileName) || file.fileType || 'application/octet-stream';
+    const previewUrl = await s3Service.generatePreviewPresignedUrl(
+      file.s3Key,
+      contentType,
+      config.upload.presignedUrlExpiry || 3600,
+      file.fileName
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        previewUrl,
+        contentType,
+        fileName: file.fileName,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.deleteVaultFile = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);

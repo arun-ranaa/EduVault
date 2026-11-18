@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { HiOutlineArrowDownTray, HiOutlineBookmark, HiBookmark, HiOutlineTrash, HiArrowLeft } from 'react-icons/hi2';
 import { resourceAPI, bookmarkAPI } from '../../services/api';
@@ -7,6 +7,7 @@ import { formatFileSize, formatDate, getResourceTypeLabel, getResourceTypeColor 
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import FileTypeIcon from '../../components/common/FileTypeIcon';
+import FilePreview from '../../components/common/FilePreview';
 import toast from 'react-hot-toast';
 
 const ResourceDetailPage = () => {
@@ -18,6 +19,8 @@ const ResourceDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const fetchResourcePreviewUrl = useCallback(() => resourceAPI.getPreviewUrl(id), [id]);
   
   useEffect(() => {
     fetchResourceDetails();
@@ -174,6 +177,13 @@ const ResourceDetailPage = () => {
           </div>
 
           <hr className="border-gray-100 mb-8" />
+
+          <FilePreview
+            fileName={resource.fileName}
+            fileType={resource.fileType}
+            fetchPreviewUrl={fetchResourcePreviewUrl}
+            onDownload={handleDownload}
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 mb-8">
             <div className="space-y-4">
